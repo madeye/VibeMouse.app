@@ -29,6 +29,7 @@ class VoiceMouseApp:
             on_rear_press=self._on_rear_press,
             front_button=config.front_button,
             rear_button=config.rear_button,
+            debounce_s=config.button_debounce_ms / 1000.0,
         )
         self._stop_event: threading.Event = threading.Event()
         self._transcribe_lock: threading.Lock = threading.Lock()
@@ -40,12 +41,13 @@ class VoiceMouseApp:
         print(
             "VibeMouse ready. "
             + f"Model={self._config.model_name}, preferred_device={self._config.device}, "
-            + f"backend={self._config.transcriber_backend}. "
+            + f"backend={self._config.transcriber_backend}, auto_paste={self._config.auto_paste}, "
+            + f"enter_mode={self._config.enter_mode}, debounce_ms={self._config.button_debounce_ms}, "
+            + f"front_button={self._config.front_button}, rear_button={self._config.rear_button}. "
             + "Press side-front to start/stop recording, side-rear to send Enter."
         )
         try:
-            while not self._stop_event.wait(0.2):
-                continue
+            _ = self._stop_event.wait()
         except KeyboardInterrupt:
             self._stop_event.set()
         finally:
@@ -56,8 +58,15 @@ class VoiceMouseApp:
         self._recorder.cancel()
         with self._workers_lock:
             workers = list(self._workers)
+        still_running: list[threading.Thread] = []
         for worker in workers:
             worker.join(timeout=5)
+            if worker.is_alive():
+                still_running.append(worker)
+        if still_running:
+            print(
+                f"Shutdown warning: {len(still_running)} transcription worker(s) are still running"
+            )
 
     def _on_front_press(self) -> None:
         if not self._recorder.is_recording:
@@ -77,8 +86,11 @@ class VoiceMouseApp:
 
     def _on_rear_press(self) -> None:
         try:
-            self._output.send_enter()
-            print("Enter key sent")
+            self._output.send_enter(mode=self._config.enter_mode)
+            if self._config.enter_mode == "none":
+                print("Enter key handling disabled (enter_mode=none)")
+            else:
+                print("Enter key sent")
         except Exception as error:
             print(f"Failed to send Enter: {error}")
 
@@ -103,13 +115,18 @@ class VoiceMouseApp:
                 print("No speech recognized")
                 return
 
-            route = self._output.inject_or_clipboard(text)
+            route = self._output.inject_or_clipboard(
+                text,
+                auto_paste=self._config.auto_paste,
+            )
             device = self._transcriber.device_in_use
             backend = self._transcriber.backend_in_use
             if route == "typed":
                 print(
                     f"Transcribed with {backend} on {device}, typed into focused input"
                 )
+            elif route == "pasted":
+                print(f"Transcribed with {backend} on {device}, pasted via Ctrl+V")
             elif route == "clipboard":
                 print(f"Transcribed with {backend} on {device}, copied to clipboard")
             else:

@@ -1,45 +1,63 @@
 # VibeMouse
 
-按鼠标前侧键开始录音，再按一次结束录音并自动转文字。识别结果优先输入到当前焦点输入框；如果没有可编辑输入框，则自动写入剪切板。鼠标后侧键用于发送 Enter。
+**Mouse-side-button voice input for VibeCoding on Linux.**
 
-语音识别引擎使用 SenseVoice，支持两种后端：
+中文文档：[`README.zh-CN.md`](./README.zh-CN.md)
 
-- `funasr`（PyTorch）
-- `funasr_onnx`（ONNXRuntime，Intel NPU 机器建议优先）
+VibeMouse turns your mouse side buttons into a fast coding workflow:
 
-默认 `VIBEMOUSE_BACKEND=auto`，会自动选择更可用的后端。
+- 🎙️ Press side button to start/stop recording
+- ✍️ Auto speech-to-text with SenseVoice
+- ⌨️ Type into focused input, or fallback to clipboard
+- ↩️ Another side button sends Enter
 
-## 功能
+If you spend hours in ChatGPT / Claude / IDEs and want to keep one hand on the mouse, this is for you.
 
-- 前侧键（默认 `x1`）：
-  - 第一次按下：开始录音
-  - 第二次按下：结束录音，触发 SenseVoice 转写
-- 后侧键（默认 `x2`）：发送回车
-- 转写输出策略：
-  - 当前有可编辑输入焦点：直接键入
-  - 否则：复制到剪切板
-- 后端/设备策略：
-  - 默认 `VIBEMOUSE_BACKEND=auto`
-  - 默认 `VIBEMOUSE_DEVICE=cpu`（当前最稳）
-  - 在 Intel NPU 场景下，`auto` 会优先尝试 `funasr_onnx`
-  - 若后端或设备失败且 `VIBEMOUSE_FALLBACK_CPU=true`，自动降级 CPU
+---
 
-## 系统要求（Linux）
+## Why VibeMouse?
 
+When VibeCoding, your flow is usually:
+
+1. Think
+2. Speak prompt
+3. Submit
+
+VibeMouse binds that to mouse side buttons so you can do it with minimal context switching.
+
+---
+
+## Features
+
+- Global mouse side-button listening
+- Start/stop recording with one side button
+- Speech recognition using SenseVoice
+- Smart output routing:
+  - If focused element is editable → type text directly
+  - Otherwise → copy text to clipboard (or auto paste when enabled)
+- Dedicated side button for Enter
+- CPU-first stable default (works reliably)
+- Optional backend switching (`funasr` / `funasr_onnx`)
+
+---
+
+## Current Platform
+
+- Linux
 - Python 3.10+
-- 音频录制支持（PortAudio / ALSA / PulseAudio）
-- 全局输入监听权限（`/dev/input/event*`，推荐将用户加入 `input` 组）
-- AT-SPI 可访问性（用于判断当前焦点是否为可编辑输入框）
-- 本地 NPU 运行环境（推荐 Intel NPU + OpenVINO 可用）
 
-建议先安装系统依赖（Debian/Ubuntu 示例）：
+---
+
+## Quick Start
+
+### 1) Install system packages (Ubuntu/Debian)
 
 ```bash
 sudo apt update
 sudo apt install -y python3-gi gir1.2-atspi-2.0 portaudio19-dev libsndfile1
 ```
 
-## 安装
+### 2) Install VibeMouse
 
 ```bash
 python3 -m venv .venv
@@ -48,57 +66,7 @@ pip install -U pip
 pip install -e .
 ```
 
-## 运行
-
-```bash
-vibemouse
-```
-
-或：
-
-```bash
-python -m vibemouse.main
-```
-
-## 环境变量配置
-
-| 变量 | 默认值 | 说明 |
-|---|---|---|
-| `VIBEMOUSE_BACKEND` | `auto` | 转写后端：`auto` / `funasr` / `funasr_onnx` |
-| `VIBEMOUSE_MODEL` | `iic/SenseVoiceSmall` | 模型名/路径（`funasr_onnx` 推荐 `iic/SenseVoiceSmall-onnx`） |
-| `VIBEMOUSE_DEVICE` | `cpu` | 设备偏好（默认 CPU 稳定模式；可手工设为 `npu:0` / `cuda:0`） |
-| `VIBEMOUSE_FALLBACK_CPU` | `true` | 设备失败时是否自动退回 CPU |
-| `VIBEMOUSE_LANGUAGE` | `auto` | 语言（`auto`/`zh`/`en`/`yue`/`ja`/`ko`） |
-| `VIBEMOUSE_USE_ITN` | `true` | 是否启用 ITN |
-| `VIBEMOUSE_ENABLE_VAD` | `true` | 是否启用 `fsmn-vad` |
-| `VIBEMOUSE_VAD_MAX_SEGMENT_MS` | `30000` | VAD 单段最大毫秒数 |
-| `VIBEMOUSE_MERGE_VAD` | `true` | 是否合并 VAD 碎片 |
-| `VIBEMOUSE_MERGE_LENGTH_S` | `15` | 合并长度（秒） |
-| `VIBEMOUSE_SAMPLE_RATE` | `16000` | 录音采样率 |
-| `VIBEMOUSE_CHANNELS` | `1` | 录音声道 |
-| `VIBEMOUSE_DTYPE` | `float32` | 录音数据类型 |
-| `VIBEMOUSE_FRONT_BUTTON` | `x1` | 前侧键（`x1` 或 `x2`） |
-| `VIBEMOUSE_REAR_BUTTON` | `x2` | 后侧键（`x1` 或 `x2`） |
-| `VIBEMOUSE_TEMP_DIR` | 系统临时目录下 `vibemouse` | 临时录音目录 |
-
-示例：
-
-```bash
-export VIBEMOUSE_DEVICE=npu:0
-export VIBEMOUSE_LANGUAGE=auto
-vibemouse
-```
-
-Intel NPU 推荐配置（自动优先 ONNX 后端）：
-
-```bash
-export VIBEMOUSE_BACKEND=auto
-export VIBEMOUSE_MODEL=iic/SenseVoiceSmall-onnx
-export VIBEMOUSE_DEVICE=npu:0
-vibemouse
-```
-
-稳定推荐（先用这个）：
+### 3) Run (recommended stable mode)
 
 ```bash
 export VIBEMOUSE_BACKEND=auto
@@ -106,30 +74,150 @@ export VIBEMOUSE_DEVICE=cpu
 vibemouse
 ```
 
-## 权限说明
+---
 
-如果程序无法监听侧键，通常是输入设备权限问题。可将当前用户加入 `input` 组并重新登录：
+## Default Button Mapping
+
+- `x1` → voice button (start/stop recording)
+- `x2` → Enter
+
+If your mouse is reversed:
+
+```bash
+export VIBEMOUSE_FRONT_BUTTON=x2
+export VIBEMOUSE_REAR_BUTTON=x1
+vibemouse
+```
+
+---
+
+## How It Works
+
+1. Press voice side button once → recording starts
+2. Press again → recording stops, transcription runs
+3. If current focus is editable input → text is typed
+4. Otherwise text is copied to clipboard
+5. Press Enter side button to submit
+
+---
+
+## Configuration
+
+Environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `VIBEMOUSE_BACKEND` | `auto` | `auto` / `funasr` / `funasr_onnx` |
+| `VIBEMOUSE_MODEL` | `iic/SenseVoiceSmall` | Model id/path |
+| `VIBEMOUSE_DEVICE` | `cpu` | Preferred device (`cpu`, `cuda:0`, `npu:0`) |
+| `VIBEMOUSE_FALLBACK_CPU` | `true` | Fallback to CPU if preferred device fails |
+| `VIBEMOUSE_BUTTON_DEBOUNCE_MS` | `150` | Ignore repeated side-button presses within this window |
+| `VIBEMOUSE_ENTER_MODE` | `enter` | Rear button enter mode: `enter`, `ctrl_enter`, `shift_enter`, `none` |
+| `VIBEMOUSE_AUTO_PASTE` | `false` | Auto paste with Ctrl+V after copying fallback text |
+| `VIBEMOUSE_TRUST_REMOTE_CODE` | `false` | Set `true` only for trusted models that require remote code |
+| `VIBEMOUSE_LANGUAGE` | `auto` | `auto`, `zh`, `en`, `yue`, `ja`, `ko` |
+| `VIBEMOUSE_USE_ITN` | `true` | Enable text normalization |
+| `VIBEMOUSE_ENABLE_VAD` | `true` | Enable VAD |
+| `VIBEMOUSE_VAD_MAX_SEGMENT_MS` | `30000` | Max VAD segment length |
+| `VIBEMOUSE_MERGE_VAD` | `true` | Merge VAD segments |
+| `VIBEMOUSE_MERGE_LENGTH_S` | `15` | Merge threshold in seconds |
+| `VIBEMOUSE_SAMPLE_RATE` | `16000` | Recording sample rate |
+| `VIBEMOUSE_CHANNELS` | `1` | Recording channels |
+| `VIBEMOUSE_DTYPE` | `float32` | Recording dtype |
+| `VIBEMOUSE_FRONT_BUTTON` | `x1` | Voice button (`x1` or `x2`) |
+| `VIBEMOUSE_REAR_BUTTON` | `x2` | Enter button (`x1` or `x2`) |
+| `VIBEMOUSE_TEMP_DIR` | system temp | Temp audio path |
+
+---
+
+## Troubleshooting
+
+### Side button not detected
+
+Likely Linux input permission issue. Add your user to `input` group and relogin:
 
 ```bash
 sudo usermod -aG input $USER
 ```
 
-## SenseVoice / NPU 说明
+### Text is not typed into app
 
-项目内部支持两条推理链路：
+Some apps do not expose editable accessibility metadata. In that case VibeMouse falls back to clipboard by design.
 
-1) `funasr`：
+### Rear button Enter feels unreliable
 
-- `AutoModel(model="iic/SenseVoiceSmall", trust_remote_code=True, device="...")`
-- `model.generate(...)`
-- `rich_transcription_postprocess(...)`
+Try a different submit combo and reduce accidental repeated clicks:
 
-2) `funasr_onnx`：
+```bash
+export VIBEMOUSE_ENTER_MODE=ctrl_enter
+export VIBEMOUSE_BUTTON_DEBOUNCE_MS=220
+systemctl --user restart vibemouse.service
+```
 
-- `SenseVoiceSmall(model_dir="iic/SenseVoiceSmall-onnx", quantize=True, ...)`
-- `model(audio_path, language=..., textnorm=...)`
-- `rich_transcription_postprocess(...)`
+For Hyprland, you can move Enter to a compositor-level bind and disable VibeMouse rear-button Enter:
 
-> 注意：当前 `funasr_onnx` 官方 Python 实现主要支持 CPU / CUDA provider；Intel NPU 设备虽可被 OpenVINO 识别，但直接对 SenseVoice ONNX 编译到 NPU 可能因动态形状限制失败。此时会自动回退 CPU。若要强制 NPU，需要额外的静态图改造/编译流程。
+```ini
+# ~/.config/hypr/UserConfigs/UserKeybinds.conf
+bind = , mouse:276, sendshortcut, , Return, activewindow
+```
 
-如果你的 NPU 栈需要额外 runtime，请先按本机驱动文档安装好再运行。
+```bash
+export VIBEMOUSE_ENTER_MODE=none
+systemctl --user restart vibemouse.service
+hyprctl reload config-only
+```
+
+### Recording works but recognition empty
+
+Check microphone gain/input source first. Also verify your sample is not silent.
+
+---
+
+## About NPU/OpenVINO
+
+NPU support depends on model graph compatibility with the NPU compiler.
+
+In this project, **CPU default is intentional** for stability. If NPU compile fails, app behavior remains usable via CPU fallback.
+
+---
+
+## Run as background process (optional)
+
+You can run with tmux/screen/systemd for always-on workflow.
+
+Example (tmux):
+
+```bash
+tmux new -d -s vibemouse "source .venv/bin/activate && vibemouse"
+tmux attach -t vibemouse
+```
+
+---
+
+## Project Layout
+
+```text
+vibemouse/
+  app.py           # app orchestration
+  audio.py         # recording
+  mouse_listener.py# side-button listener
+  transcriber.py   # ASR backends
+  output.py        # type/clipboard/enter output
+  config.py        # env config
+  main.py          # CLI entry
+```
+
+---
+
+## Development
+
+```bash
+python -m compileall vibemouse
+python -m pip check
+```
+
+---
+
+## License
+
+This project uses upstream dependencies (SenseVoice/FunASR/OpenVINO, etc.) under their respective licenses.

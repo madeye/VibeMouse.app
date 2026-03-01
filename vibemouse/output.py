@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib
+import os
 import subprocess
+import time
 from typing import Protocol, cast
 
 import pyperclip
@@ -26,12 +28,31 @@ class TextOutput:
         )
         self._kb: _KeyboardController = controller_ctor()
         self._enter_key: object = key_holder.enter
+        self._ctrl_key: object = key_holder.ctrl
+        self._shift_key: object = key_holder.shift
+        self._atspi: object | None = self._load_atspi_module()
+        self._hyprland_session: bool = self._detect_hyprland_session()
 
-    def send_enter(self) -> None:
-        self._kb.press(self._enter_key)
-        self._kb.release(self._enter_key)
+    def send_enter(self, *, mode: str = "enter") -> None:
+        normalized = mode.strip().lower()
+        if normalized == "none":
+            return
+        if normalized == "enter":
+            if self._send_hyprland_shortcut(mod="", key="Return"):
+                return
+            if self._send_enter_via_atspi():
+                return
+            self._tap_key(self._enter_key)
+            return
+        if normalized == "ctrl_enter":
+            self._tap_modified_key(self._ctrl_key, self._enter_key)
+            return
+        if normalized == "shift_enter":
+            self._tap_modified_key(self._shift_key, self._enter_key)
+            return
+        raise ValueError(f"Unsupported enter mode: {mode!r}")
 
-    def inject_or_clipboard(self, text: str) -> str:
+    def inject_or_clipboard(self, text: str, *, auto_paste: bool = False) -> str:
         normalized = text.strip()
         if not normalized:
             return "empty"
@@ -41,7 +62,90 @@ class TextOutput:
             return "typed"
 
         pyperclip.copy(normalized)
+        if auto_paste:
+            try:
+                self._paste_clipboard()
+                return "pasted"
+            except Exception:
+                return "clipboard"
         return "clipboard"
+
+    def _paste_clipboard(self) -> None:
+        if self._send_hyprland_shortcut(mod="CTRL", key="V"):
+            return
+        self._kb.press(self._ctrl_key)
+        self._kb.press("v")
+        self._kb.release("v")
+        self._kb.release(self._ctrl_key)
+
+    def _tap_key(self, key: object) -> None:
+        self._kb.press(key)
+        time.sleep(0.012)
+        self._kb.release(key)
+
+    def _tap_modified_key(self, modifier: object, key: object) -> None:
+        self._kb.press(modifier)
+        self._kb.press(key)
+        time.sleep(0.012)
+        self._kb.release(key)
+        self._kb.release(modifier)
+
+    def _send_enter_via_atspi(self) -> bool:
+        atspi_module = self._atspi
+        if atspi_module is None:
+            return False
+
+        try:
+            key_synth = cast(object, getattr(atspi_module, "KeySynthType"))
+            press_release = cast(object, getattr(key_synth, "PRESSRELEASE"))
+            generate_keyboard_event = cast(
+                _GenerateKeyboardEventFn,
+                getattr(atspi_module, "generate_keyboard_event"),
+            )
+            return bool(generate_keyboard_event(65293, None, press_release))
+        except Exception:
+            return False
+
+    def _send_hyprland_shortcut(self, *, mod: str, key: str) -> bool:
+        if not self._hyprland_session:
+            return False
+
+        mod_part = mod.strip().upper()
+        if mod_part:
+            arg = f"{mod_part}, {key}, activewindow"
+        else:
+            arg = f", {key}, activewindow"
+
+        try:
+            proc = subprocess.run(
+                ["hyprctl", "dispatch", "sendshortcut", arg],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=1.0,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+
+        return proc.returncode == 0 and proc.stdout.strip() == "ok"
+
+    @staticmethod
+    def _load_atspi_module() -> object | None:
+        try:
+            gi = importlib.import_module("gi")
+            require_version = cast(_RequireVersionFn, getattr(gi, "require_version"))
+            require_version("Atspi", "2.0")
+            atspi_repo = cast(object, importlib.import_module("gi.repository"))
+            return cast(object, getattr(atspi_repo, "Atspi"))
+        except Exception:
+            return None
+
+    @staticmethod
+    def _detect_hyprland_session() -> bool:
+        desktop = os.getenv("XDG_CURRENT_DESKTOP", "")
+        if "hyprland" in desktop.lower():
+            return True
+        return bool(os.getenv("HYPRLAND_INSTANCE_SIGNATURE"))
 
     def _is_text_input_focused(self) -> bool:
         script = (
@@ -63,12 +167,17 @@ class TextOutput:
             "print('1' if editable or role in roles else '0')\n"
         )
 
-        proc = subprocess.run(
-            ["python3", "-c", script],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        try:
+            proc = subprocess.run(
+                ["python3", "-c", script],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=1.5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+
         return proc.returncode == 0 and proc.stdout.strip() == "1"
 
 
@@ -86,3 +195,18 @@ class _ControllerCtor(Protocol):
 
 class _KeyHolder(Protocol):
     enter: object
+    ctrl: object
+    shift: object
+
+
+class _GenerateKeyboardEventFn(Protocol):
+    def __call__(
+        self,
+        keyval: int,
+        keystring: str | None,
+        synth_type: object,
+    ) -> bool: ...
+
+
+class _RequireVersionFn(Protocol):
+    def __call__(self, namespace: str, version: str) -> None: ...

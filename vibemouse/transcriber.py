@@ -181,7 +181,7 @@ class _FunASRBackend:
 
         kwargs: dict[str, object] = {
             "model": self._config.model_name,
-            "trust_remote_code": True,
+            "trust_remote_code": self._config.trust_remote_code,
             "device": device,
         }
         if self._config.enable_vad:

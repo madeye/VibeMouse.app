@@ -17,11 +17,16 @@ class SideButtonListener:
         on_rear_press: ButtonCallback,
         front_button: str,
         rear_button: str,
+        debounce_s: float = 0.15,
     ) -> None:
         self._on_front_press: ButtonCallback = on_front_press
         self._on_rear_press: ButtonCallback = on_rear_press
         self._front_button: str = front_button
         self._rear_button: str = rear_button
+        self._debounce_s: float = max(0.0, debounce_s)
+        self._last_front_press_monotonic: float = 0.0
+        self._last_rear_press_monotonic: float = 0.0
+        self._debounce_lock: threading.Lock = threading.Lock()
         self._stop: threading.Event = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -38,15 +43,23 @@ class SideButtonListener:
             self._thread.join(timeout=2)
 
     def _run(self) -> None:
+        last_error_summary: str | None = None
         while not self._stop.is_set():
             try:
                 self._run_evdev()
                 return
-            except Exception:
+            except Exception as evdev_error:
                 try:
                     self._run_pynput()
                     return
-                except Exception:
+                except Exception as pynput_error:
+                    summary = (
+                        "Mouse listener backends unavailable "
+                        + f"(evdev: {evdev_error}; pynput: {pynput_error}). Retrying..."
+                    )
+                    if summary != last_error_summary:
+                        print(summary)
+                        last_error_summary = summary
                     if self._stop.wait(1.0):
                         return
 
@@ -76,11 +89,21 @@ class SideButtonListener:
             except Exception:
                 continue
             try:
-                key_cap = dev.capabilities().get(ecodes.EV_KEY, [])
-                if front_code in key_cap or rear_code in key_cap:
-                    devices.append(dev)
-                else:
+                caps = dev.capabilities()
+                key_cap = caps.get(ecodes.EV_KEY, [])
+                if front_code not in key_cap and rear_code not in key_cap:
                     dev.close()
+                    continue
+
+                btn_mouse = getattr(ecodes, "BTN_MOUSE", None)
+                has_pointer_button = ecodes.BTN_LEFT in key_cap or (
+                    isinstance(btn_mouse, int) and btn_mouse in key_cap
+                )
+                if not has_pointer_button:
+                    dev.close()
+                    continue
+
+                devices.append(dev)
             except Exception:
                 dev.close()
 
@@ -97,9 +120,9 @@ class SideButtonListener:
                         if event.type != ecodes.EV_KEY or event.value != 1:
                             continue
                         if event.code == front_code:
-                            self._on_front_press()
+                            self._dispatch_front_press()
                         elif event.code == rear_code:
-                            self._on_rear_press()
+                            self._dispatch_rear_press()
         finally:
             for dev in devices:
                 dev.close()
@@ -125,9 +148,9 @@ class SideButtonListener:
                 return
             btn_name = str(button).lower().split(".")[-1]
             if btn_name in front_candidates:
-                self._on_front_press()
+                self._dispatch_front_press()
             elif btn_name in rear_candidates:
-                self._on_rear_press()
+                self._dispatch_rear_press()
 
         listener = listener_ctor(on_click=on_click)
         listener.start()
@@ -136,6 +159,30 @@ class SideButtonListener:
                 time.sleep(0.2)
         finally:
             listener.stop()
+
+    def _dispatch_front_press(self) -> None:
+        if self._should_fire_front():
+            self._on_front_press()
+
+    def _dispatch_rear_press(self) -> None:
+        if self._should_fire_rear():
+            self._on_rear_press()
+
+    def _should_fire_front(self) -> bool:
+        now = time.monotonic()
+        with self._debounce_lock:
+            if now - self._last_front_press_monotonic < self._debounce_s:
+                return False
+            self._last_front_press_monotonic = now
+            return True
+
+    def _should_fire_rear(self) -> bool:
+        now = time.monotonic()
+        with self._debounce_lock:
+            if now - self._last_rear_press_monotonic < self._debounce_s:
+                return False
+            self._last_rear_press_monotonic = now
+            return True
 
 
 class _EvdevEvent(Protocol):
@@ -165,6 +212,7 @@ class _ListDevicesFn(Protocol):
 class _Ecodes(Protocol):
     BTN_SIDE: int
     BTN_EXTRA: int
+    BTN_LEFT: int
     EV_KEY: int
 
 

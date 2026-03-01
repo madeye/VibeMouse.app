@@ -6,8 +6,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
+from uuid import uuid4
 
 import numpy as np
+from numpy.typing import NDArray
+
+
+AudioFrame = NDArray[np.float32]
 
 
 @dataclass
@@ -31,12 +36,12 @@ class _SoundDeviceModule(Protocol):
         samplerate: int,
         channels: int,
         dtype: str,
-        callback: Callable[[np.ndarray, int, object, object], None],
+        callback: Callable[[AudioFrame, int, object, object], None],
     ) -> _AudioStream: ...
 
 
 class _SoundFileModule(Protocol):
-    def write(self, file: str | Path, data: np.ndarray, samplerate: int) -> None: ...
+    def write(self, file: str | Path, data: AudioFrame, samplerate: int) -> None: ...
 
 
 class AudioRecorder:
@@ -50,7 +55,7 @@ class AudioRecorder:
         self._sd: _SoundDeviceModule | None = None
         self._sf: _SoundFileModule | None = None
         self._lock: threading.Lock = threading.Lock()
-        self._frames: list[np.ndarray] = []
+        self._frames: list[AudioFrame] = []
         self._stream: _AudioStream | None = None
         self._recording: bool = False
 
@@ -64,7 +69,12 @@ class AudioRecorder:
         with self._lock:
             if self._recording:
                 return
-            self._temp_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                self._temp_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as error:
+                raise RuntimeError(
+                    f"Failed to create temp audio directory {self._temp_dir}: {error}"
+                ) from error
             self._frames = []
             if self._sd is None:
                 raise RuntimeError("Audio input module not initialized")
@@ -96,10 +106,15 @@ class AudioRecorder:
             audio = np.concatenate(self._frames, axis=0)
             self._frames = []
 
-        out_path = self._temp_dir / "latest_recording.wav"
+        out_path = self._temp_dir / f"recording_{uuid4().hex}.wav"
         if self._sf is None:
             raise RuntimeError("Audio write module not initialized")
-        self._sf.write(out_path, audio, self._sample_rate)
+        try:
+            self._sf.write(out_path, audio, self._sample_rate)
+        except Exception as error:
+            raise RuntimeError(
+                f"Failed to write recording to {out_path}: {error}"
+            ) from error
         duration = float(len(audio) / self._sample_rate)
         return AudioRecording(path=out_path, duration_s=duration)
 
@@ -118,7 +133,7 @@ class AudioRecorder:
             stream.close()
 
     def _callback(
-        self, indata: np.ndarray, frames: int, time_data: object, status: object
+        self, indata: AudioFrame, frames: int, time_data: object, status: object
     ) -> None:
         del frames
         del time_data
