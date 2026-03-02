@@ -9,7 +9,7 @@ VibeMouse turns your mouse side buttons into a fast coding workflow:
 - 🎙️ Press side button to start/stop recording
 - ✍️ Auto speech-to-text with SenseVoice
 - ⌨️ Type into focused input, or fallback to clipboard
-- ↩️ Another side button sends Enter
+- ↩️ Rear button sends Enter (or sends transcript to OpenClaw while recording)
 
 If you spend hours in ChatGPT / Claude / IDEs and want to keep one hand on the mouse, this is for you.
 
@@ -35,7 +35,9 @@ VibeMouse binds that to mouse side buttons so you can do it with minimal context
 - Smart output routing:
   - If focused element is editable → type text directly
   - Otherwise → copy text to clipboard (or auto paste when enabled)
-- Dedicated side button for Enter
+- Rear button behavior by state:
+  - Idle: send Enter
+  - Recording: stop recording and send transcript to OpenClaw
 - CPU-first stable default (works reliably)
 - Optional backend switching (`funasr` / `funasr_onnx`)
 
@@ -79,7 +81,7 @@ vibemouse
 ## Default Button Mapping
 
 - `x1` → voice button (start/stop recording)
-- `x2` → Enter
+- `x2` → Enter (idle) / OpenClaw submit (while recording)
 
 If your mouse is reversed:
 
@@ -97,7 +99,9 @@ vibemouse
 2. Press again → recording stops, transcription runs
 3. If current focus is editable input → text is typed
 4. Otherwise text is copied to clipboard
-5. Press Enter side button to submit
+5. Press rear side button:
+   - idle mode: send Enter
+   - recording mode: stop recording and send transcript to OpenClaw
 
 ---
 
@@ -123,6 +127,9 @@ Environment variables:
 | `VIBEMOUSE_GESTURE_RIGHT_ACTION` | `send_enter` | Action for `right` gesture: `record_toggle`, `send_enter`, `workspace_left`, `workspace_right`, `noop` |
 | `VIBEMOUSE_ENTER_MODE` | `enter` | Rear button enter mode: `enter`, `ctrl_enter`, `shift_enter`, `none` |
 | `VIBEMOUSE_AUTO_PASTE` | `false` | Auto paste with Ctrl+V after copying fallback text |
+| `VIBEMOUSE_OPENCLAW_COMMAND` | `openclaw` | OpenClaw CLI command prefix. Example: `openclaw --profile prod` |
+| `VIBEMOUSE_OPENCLAW_AGENT` | `main` | Target agent name passed as `--agent` |
+| `VIBEMOUSE_OPENCLAW_TIMEOUT_S` | `20.0` | Timeout in seconds for `openclaw agent` command |
 | `VIBEMOUSE_TRUST_REMOTE_CODE` | `false` | Set `true` only for trusted models that require remote code |
 | `VIBEMOUSE_PREWARM_ON_START` | `true` | Preload ASR backend at startup to reduce first-transcription latency |
 | `VIBEMOUSE_STATUS_FILE` | `$XDG_RUNTIME_DIR/vibemouse-status.json` | Runtime status file used by bar indicators |
@@ -179,6 +186,22 @@ bind = , mouse:276, sendshortcut, , Return, activewindow
 export VIBEMOUSE_ENTER_MODE=none
 systemctl --user restart vibemouse.service
 hyprctl reload config-only
+```
+
+### Rear button in recording mode does not reach OpenClaw
+
+Check OpenClaw CLI availability first:
+
+```bash
+openclaw agent --message "ping" --json
+```
+
+If you use a custom binary path/profile, set:
+
+```bash
+export VIBEMOUSE_OPENCLAW_COMMAND="openclaw --profile prod"
+export VIBEMOUSE_OPENCLAW_AGENT="ops"
+systemctl --user restart vibemouse.service
 ```
 
 ### Mouse gestures do not trigger actions

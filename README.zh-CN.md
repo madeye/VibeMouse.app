@@ -9,7 +9,7 @@ VibeMouse 把鼠标侧键变成高频编码工作流：
 - 🎙️ 按侧键开始/结束录音
 - ✍️ 自动语音转文字（SenseVoice）
 - ⌨️ 有输入框就直接输入，没有就写入剪贴板
-- ↩️ 另一个侧键发送 Enter
+- ↩️ 后侧键发送 Enter（录音中改为发送到 OpenClaw）
 
 如果你经常在 ChatGPT / Claude / IDE 里写提示词或代码，这个工具可以让你更少离开鼠标。
 
@@ -35,7 +35,9 @@ VibeMouse 把这三步绑定到鼠标侧键，减少键盘鼠标来回切换。
 - 智能输出策略：
   - 焦点在可编辑输入框：直接键入
   - 焦点不在可编辑输入框：复制到剪贴板（可开启自动粘贴）
-- 一个侧键发送 Enter
+- 后侧键按状态分流：
+  - 空闲：发送 Enter
+  - 录音中：停止录音并把转写内容发给 OpenClaw
 - 默认 CPU 稳定模式（开箱可用）
 - 可切换识别后端（`funasr` / `funasr_onnx`）
 
@@ -79,7 +81,7 @@ vibemouse
 ## 默认按键映射
 
 - `x1` → 语音键（开始/结束录音）
-- `x2` → Enter
+- `x2` → Enter（空闲）/ OpenClaw 提交（录音中）
 
 如果你的鼠标反过来：
 
@@ -97,7 +99,9 @@ vibemouse
 2. 再按一次语音键，停止录音并识别
 3. 如果当前焦点可编辑，自动输入文字
 4. 否则自动复制到剪贴板
-5. 按 Enter 键位侧键提交
+5. 按后侧键：
+   - 空闲态发送 Enter
+   - 录音态停止录音并发送到 OpenClaw
 
 ---
 
@@ -121,6 +125,9 @@ vibemouse
 | `VIBEMOUSE_GESTURE_RIGHT_ACTION` | `send_enter` | `right` 手势动作：`record_toggle`、`send_enter`、`workspace_left`、`workspace_right`、`noop` |
 | `VIBEMOUSE_ENTER_MODE` | `enter` | 后侧键提交模式：`enter`、`ctrl_enter`、`shift_enter`、`none` |
 | `VIBEMOUSE_AUTO_PASTE` | `false` | 回退到剪贴板时自动发送 `Ctrl+V` 粘贴 |
+| `VIBEMOUSE_OPENCLAW_COMMAND` | `openclaw` | OpenClaw CLI 命令前缀，例如 `openclaw --profile prod` |
+| `VIBEMOUSE_OPENCLAW_AGENT` | `main` | 目标 agent，运行时追加 `--agent` |
+| `VIBEMOUSE_OPENCLAW_TIMEOUT_S` | `20.0` | 执行 `openclaw agent` 的超时时间（秒） |
 | `VIBEMOUSE_TRUST_REMOTE_CODE` | `false` | 仅在可信模型明确要求远端代码时设为 `true` |
 | `VIBEMOUSE_PREWARM_ON_START` | `true` | 启动时预热 ASR 后端，缩短首次识别等待时间 |
 | `VIBEMOUSE_STATUS_FILE` | `$XDG_RUNTIME_DIR/vibemouse-status.json` | 供顶栏读取的运行状态文件 |
@@ -177,6 +184,22 @@ bind = , mouse:276, sendshortcut, , Return, activewindow
 export VIBEMOUSE_ENTER_MODE=none
 systemctl --user restart vibemouse.service
 hyprctl reload config-only
+```
+
+### 录音中按后侧键没有发送到 OpenClaw
+
+先确认 OpenClaw CLI 可用：
+
+```bash
+openclaw agent --message "ping" --json
+```
+
+如果你使用自定义路径或 profile：
+
+```bash
+export VIBEMOUSE_OPENCLAW_COMMAND="openclaw --profile prod"
+export VIBEMOUSE_OPENCLAW_AGENT="ops"
+systemctl --user restart vibemouse.service
 ```
 
 ### 鼠标手势没有触发动作
