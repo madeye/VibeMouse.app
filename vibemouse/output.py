@@ -49,6 +49,7 @@ class TextOutput:
         self._enter_key: object = key_holder.enter
         self._ctrl_key: object = key_holder.ctrl
         self._shift_key: object = key_holder.shift
+        self._insert_key: object = key_holder.insert
         self._atspi: object | None = load_atspi_module()
         self._system_integration: SystemIntegration = (
             system_integration
@@ -164,10 +165,78 @@ class TextOutput:
             if self._send_platform_shortcut(mod=mod, key=key):
                 return
 
+        if (
+            self._hyprland_session
+            and terminal_active
+            and self._send_ctrl_shift_v_via_keyboard()
+        ):
+            return
+
+        if (
+            self._hyprland_session
+            and terminal_active
+            and self._send_shift_insert_via_keyboard()
+        ):
+            return
+
         self._kb.press(self._ctrl_key)
         self._kb.press("v")
         self._kb.release("v")
         self._kb.release(self._ctrl_key)
+
+    def _send_ctrl_shift_v_via_keyboard(self) -> bool:
+        pressed_ctrl = False
+        pressed_shift = False
+        pressed_v = False
+        try:
+            self._kb.press(self._ctrl_key)
+            pressed_ctrl = True
+            self._kb.press(self._shift_key)
+            pressed_shift = True
+            self._kb.press("v")
+            pressed_v = True
+            return True
+        except Exception:
+            return False
+        finally:
+            if pressed_v:
+                try:
+                    self._kb.release("v")
+                except Exception:
+                    pass
+            if pressed_shift:
+                try:
+                    self._kb.release(self._shift_key)
+                except Exception:
+                    pass
+            if pressed_ctrl:
+                try:
+                    self._kb.release(self._ctrl_key)
+                except Exception:
+                    pass
+
+    def _send_shift_insert_via_keyboard(self) -> bool:
+        pressed_shift = False
+        pressed_insert = False
+        try:
+            self._kb.press(self._shift_key)
+            pressed_shift = True
+            self._kb.press(self._insert_key)
+            pressed_insert = True
+            return True
+        except Exception:
+            return False
+        finally:
+            if pressed_insert:
+                try:
+                    self._kb.release(self._insert_key)
+                except Exception:
+                    pass
+            if pressed_shift:
+                try:
+                    self._kb.release(self._shift_key)
+                except Exception:
+                    pass
 
     def _tap_key(self, key: object) -> None:
         self._kb.press(key)
@@ -347,6 +416,7 @@ class _KeyHolder(Protocol):
     enter: object
     ctrl: object
     shift: object
+    insert: object
 
 
 @dataclass(frozen=True)

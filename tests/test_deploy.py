@@ -43,12 +43,18 @@ class DeployHelpersTests(unittest.TestCase):
 
     def test_render_service_file_contains_paths(self) -> None:
         env_file = Path("/tmp/vibemouse.env")
+        log_file = Path("/tmp/vibemouse.log")
         service = render_service_file(
-            env_file=env_file, exec_start="/tmp/vibemouse run"
+            env_file=env_file,
+            log_file=log_file,
+            exec_start="/tmp/vibemouse run",
         )
 
         self.assertIn("EnvironmentFile=/tmp/vibemouse.env", service)
         self.assertIn("ExecStart=/tmp/vibemouse run", service)
+        self.assertIn("ExecStartPre=/usr/bin/mkdir -p /tmp", service)
+        self.assertIn("StandardOutput=append:/tmp/vibemouse.log", service)
+        self.assertIn("StandardError=append:/tmp/vibemouse.log", service)
 
 
 class DeployCommandTests(unittest.TestCase):
@@ -60,6 +66,7 @@ class DeployCommandTests(unittest.TestCase):
                 preset="stable",
                 env_file=str(env_file),
                 service_file=str(service_file),
+                log_file=str(Path(tmp) / "service.log"),
                 openclaw_command="openclaw",
                 openclaw_agent="main",
                 openclaw_retries=None,
@@ -82,6 +89,7 @@ class DeployCommandTests(unittest.TestCase):
                 preset="stable",
                 env_file=str(env_file),
                 service_file=str(service_file),
+                log_file=str(Path(tmp) / "service.log"),
                 openclaw_command="openclaw --profile prod",
                 openclaw_agent="ops",
                 openclaw_retries=2,
@@ -104,6 +112,7 @@ class DeployCommandTests(unittest.TestCase):
             preset="stable",
             env_file="/tmp/deploy.env",
             service_file="/tmp/vibemouse.service",
+            log_file="/tmp/vibemouse.log",
             openclaw_command="openclaw",
             openclaw_agent="main",
             openclaw_retries=-1,

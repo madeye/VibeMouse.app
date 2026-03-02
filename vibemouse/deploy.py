@@ -51,6 +51,11 @@ def configure_deploy_parser(parser: argparse.ArgumentParser) -> None:
         help="path to generated systemd user service file",
     )
     _ = parser.add_argument(
+        "--log-file",
+        default=str(Path.home() / ".local" / "state" / "vibemouse" / "service.log"),
+        help="path to persistent service log file",
+    )
+    _ = parser.add_argument(
         "--openclaw-command",
         default=shutil.which("openclaw") or "openclaw",
         help="OpenClaw command prefix",
@@ -104,6 +109,7 @@ def run_deploy(args: argparse.Namespace) -> int:
 
     env_path = Path(str(getattr(args, "env_file", ""))).expanduser()
     service_path = Path(str(getattr(args, "service_file", ""))).expanduser()
+    log_path = Path(str(getattr(args, "log_file", ""))).expanduser()
     exec_start = _resolve_exec_start(str(getattr(args, "exec_start", "") or ""))
 
     env_map = build_deploy_env(
@@ -115,6 +121,7 @@ def run_deploy(args: argparse.Namespace) -> int:
     env_content = render_env_file(env_map)
     service_content = render_service_file(
         env_file=env_path,
+        log_file=log_path,
         exec_start=exec_start,
     )
 
@@ -178,7 +185,8 @@ def render_env_file(env_map: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
-def render_service_file(*, env_file: Path, exec_start: str) -> str:
+def render_service_file(*, env_file: Path, log_file: Path, exec_start: str) -> str:
+    log_dir = log_file.parent
     lines = [
         "[Unit]",
         "Description=VibeMouse voice input service",
@@ -188,7 +196,10 @@ def render_service_file(*, env_file: Path, exec_start: str) -> str:
         "[Service]",
         "Type=simple",
         f"EnvironmentFile={env_file}",
+        f"ExecStartPre=/usr/bin/mkdir -p {log_dir}",
         f"ExecStart={exec_start}",
+        f"StandardOutput=append:{log_file}",
+        f"StandardError=append:{log_file}",
         "Restart=on-failure",
         "RestartSec=2",
         "",

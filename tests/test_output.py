@@ -115,6 +115,7 @@ class TextOutputRoutingTests(unittest.TestCase):
         setattr(subject, "_kb", keyboard)
         setattr(subject, "_ctrl_key", "CTRL")
         setattr(subject, "_shift_key", "SHIFT")
+        setattr(subject, "_insert_key", "INSERT")
         setattr(subject, "_enter_key", "ENTER")
         setattr(subject, "_atspi", None)
         setattr(subject, "_hyprland_session", False)
@@ -482,6 +483,136 @@ class TextOutputRoutingTests(unittest.TestCase):
             ["hyprctl", "dispatch", "sendshortcut", "SHIFT, Insert, activewindow"],
         )
         self.assertEqual(keyboard.events, [])
+
+    def test_auto_paste_hyprland_terminal_all_system_shortcuts_fail_falls_back_to_ctrl_shift_v_keyboard(
+        self,
+    ) -> None:
+        subject = self._make_subject()
+        keyboard = _FakeKeyboardController()
+        self._bind_keyboard(subject, keyboard)
+        setattr(subject, "_is_text_input_focused", self._not_focused)
+        setattr(subject, "_hyprland_session", True)
+
+        with (
+            patch("vibemouse.output.pyperclip.copy") as copy_mock,
+            patch.object(
+                subject,
+                "_is_hyprland_terminal_active",
+                return_value=True,
+            ),
+            patch(
+                "vibemouse.output.subprocess.run",
+                side_effect=[
+                    SimpleNamespace(returncode=1, stdout=""),
+                    SimpleNamespace(returncode=1, stdout=""),
+                    SimpleNamespace(returncode=1, stdout=""),
+                ],
+            ) as run_mock,
+        ):
+            route = subject.inject_or_clipboard("hello", auto_paste=True)
+
+        self.assertEqual(route, "pasted")
+        self.assertEqual(copy_mock.call_count, 1)
+        self.assertEqual(run_mock.call_count, 3)
+        self.assertEqual(
+            keyboard.events,
+            [
+                ("press", "CTRL"),
+                ("press", "SHIFT"),
+                ("press", "v"),
+                ("release", "v"),
+                ("release", "SHIFT"),
+                ("release", "CTRL"),
+            ],
+        )
+
+    def test_auto_paste_hyprland_terminal_keyboard_shift_insert_fallback_when_ctrl_shift_v_fails(
+        self,
+    ) -> None:
+        subject = self._make_subject()
+
+        class _CtrlShiftVFailingKeyboard(_FakeKeyboardController):
+            def press(self, key: object) -> None:
+                if key == "v":
+                    raise RuntimeError("v press failed")
+                super().press(key)
+
+        keyboard = _CtrlShiftVFailingKeyboard()
+        self._bind_keyboard(subject, keyboard)
+        setattr(subject, "_is_text_input_focused", self._not_focused)
+        setattr(subject, "_hyprland_session", True)
+
+        with (
+            patch("vibemouse.output.pyperclip.copy") as copy_mock,
+            patch.object(
+                subject,
+                "_is_hyprland_terminal_active",
+                return_value=True,
+            ),
+            patch(
+                "vibemouse.output.subprocess.run",
+                side_effect=[
+                    SimpleNamespace(returncode=1, stdout=""),
+                    SimpleNamespace(returncode=1, stdout=""),
+                    SimpleNamespace(returncode=1, stdout=""),
+                ],
+            ) as run_mock,
+        ):
+            route = subject.inject_or_clipboard("hello", auto_paste=True)
+
+        self.assertEqual(route, "pasted")
+        self.assertEqual(copy_mock.call_count, 1)
+        self.assertEqual(run_mock.call_count, 3)
+        self.assertEqual(
+            keyboard.events,
+            [
+                ("press", "CTRL"),
+                ("press", "SHIFT"),
+                ("release", "SHIFT"),
+                ("release", "CTRL"),
+                ("press", "SHIFT"),
+                ("press", "INSERT"),
+                ("release", "INSERT"),
+                ("release", "SHIFT"),
+            ],
+        )
+
+    def test_auto_paste_non_hyprland_shortcut_failure_falls_back_to_ctrl_v(
+        self,
+    ) -> None:
+        subject = self._make_subject()
+        keyboard = _FakeKeyboardController()
+        self._bind_keyboard(subject, keyboard)
+        setattr(subject, "_is_text_input_focused", self._not_focused)
+        setattr(subject, "_hyprland_session", False)
+        setattr(
+            subject,
+            "_system_integration",
+            SimpleNamespace(
+                send_shortcut=lambda mod, key: False,
+                is_terminal_window_active=lambda: True,
+                paste_shortcuts=lambda terminal_active: (("ALT", "V"),)
+                if terminal_active
+                else (),
+                send_enter_via_accessibility=lambda: None,
+                is_text_input_focused=lambda: None,
+            ),
+        )
+
+        with patch("vibemouse.output.pyperclip.copy") as copy_mock:
+            route = subject.inject_or_clipboard("hello", auto_paste=True)
+
+        self.assertEqual(route, "pasted")
+        self.assertEqual(copy_mock.call_count, 1)
+        self.assertEqual(
+            keyboard.events,
+            [
+                ("press", "CTRL"),
+                ("press", "v"),
+                ("release", "v"),
+                ("release", "CTRL"),
+            ],
+        )
 
     def test_hyprland_terminal_detection_by_window_class(self) -> None:
         subject = self._make_subject()

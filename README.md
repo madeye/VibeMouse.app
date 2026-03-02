@@ -170,8 +170,15 @@ Useful flags:
 - `--openclaw-command "openclaw --profile prod"`
 - `--openclaw-agent main`
 - `--openclaw-retries 2`
+- `--log-file ~/.local/state/vibemouse/service.log`
 - `--skip-systemctl`
 - `--dry-run`
+
+Persistent debug logs (recommended):
+
+```bash
+tail -f ~/.local/state/vibemouse/service.log
+```
 
 ## Frequently Used Variables
 
