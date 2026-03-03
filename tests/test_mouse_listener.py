@@ -107,9 +107,9 @@ class SideButtonListenerGestureTests(unittest.TestCase):
 
         accumulate = cast(
             Callable[..., None],
-            getattr(listener, "_accumulate_gesture_delta"),
+            getattr(listener, "_accumulate_gesture_position"),
         )
-        accumulate(dx=300, dy=0)
+        accumulate(300, 0)
 
         def capture_restore(position: tuple[int, int]) -> None:
             restored.append(position)

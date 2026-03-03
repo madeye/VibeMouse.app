@@ -33,10 +33,11 @@ def run_doctor(*, apply_fixes: bool = False) -> int:
         checks.extend(_check_openclaw(config))
 
     checks.append(_check_audio_input(config))
-    checks.append(_check_input_device_permissions(config))
-
-    checks.append(_check_hyprland_return_bind_conflict(config))
-    checks.append(_check_user_service_state())
+    checks.append(_check_input_device_permissions())
+    checks.append(_check_macos_pyobjc())
+    checks.append(_check_macos_accessibility_permission())
+    checks.append(_check_macos_app_bundle())
+    checks.append(_check_macos_launchagent_state())
 
     _print_checks(checks)
 
@@ -47,67 +48,7 @@ def run_doctor(*, apply_fixes: bool = False) -> int:
 
 
 def _apply_doctor_fixes() -> None:
-    _fix_hyprland_return_bind_conflict()
-    _ensure_user_service_active()
-
-
-def _fix_hyprland_return_bind_conflict() -> None:
-    bind_path = Path.home() / ".config/hypr/UserConfigs/UserKeybinds.conf"
-    if not bind_path.exists():
-        return
-
-    try:
-        lines = bind_path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    except OSError:
-        return
-
-    changed = False
-    rewritten: list[str] = []
-    for line in lines:
-        stripped = line.strip()
-        if (
-            stripped.startswith("#")
-            or "sendshortcut" not in stripped
-            or "Return" not in stripped
-        ):
-            rewritten.append(line)
-            continue
-
-        if "mouse:275" in stripped or "mouse:276" in stripped:
-            rewritten.append(f"# {line} # auto-disabled by vibemouse doctor --fix")
-            changed = True
-            continue
-
-        rewritten.append(line)
-
-    if not changed:
-        return
-
-    try:
-        bind_path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
-    except OSError:
-        return
-
-    _ = _run_subprocess(
-        ["hyprctl", "reload", "config-only"],
-        timeout=3.0,
-    )
-
-
-def _ensure_user_service_active() -> None:
-    probe = _run_subprocess(
-        ["systemctl", "--user", "is-active", "vibemouse.service"],
-        timeout=3.0,
-    )
-    if probe is None:
-        return
-    if probe.returncode == 0 and probe.stdout.strip() == "active":
-        return
-
-    _ = _run_subprocess(
-        ["systemctl", "--user", "restart", "vibemouse.service"],
-        timeout=8.0,
-    )
+    _ensure_macos_launchagent_loaded()
 
 
 def _check_config_load() -> tuple[DoctorCheck, AppConfig | None]:
@@ -346,124 +287,11 @@ def _check_audio_input(config: AppConfig | None) -> DoctorCheck:
     )
 
 
-def _check_input_device_permissions(config: AppConfig | None) -> DoctorCheck:
-    if not sys.platform.startswith("linux"):
-        return DoctorCheck(
-            name="input-device-permissions",
-            status="warn",
-            detail="raw input permission check is only available on Linux",
-        )
-
-    try:
-        evdev_module = importlib.import_module("evdev")
-    except Exception as error:
-        return DoctorCheck(
-            name="input-device-permissions",
-            status="warn",
-            detail=f"cannot import evdev for raw input check: {error}",
-        )
-
-    list_devices = getattr(evdev_module, "list_devices", None)
-    input_device_ctor = getattr(evdev_module, "InputDevice", None)
-    ecodes = getattr(evdev_module, "ecodes", None)
-    if not callable(list_devices) or input_device_ctor is None or ecodes is None:
-        return DoctorCheck(
-            name="input-device-permissions",
-            status="warn",
-            detail="evdev module is missing required APIs",
-        )
-
-    try:
-        device_paths_obj = list_devices()
-    except Exception as error:
-        return DoctorCheck(
-            name="input-device-permissions",
-            status="warn",
-            detail=f"failed to list /dev/input devices: {error}",
-        )
-
-    if not isinstance(device_paths_obj, list):
-        return DoctorCheck(
-            name="input-device-permissions",
-            status="warn",
-            detail="unexpected device-path payload from evdev",
-        )
-
-    device_paths = [str(path) for path in device_paths_obj]
-    if not device_paths:
-        return DoctorCheck(
-            name="input-device-permissions",
-            status="warn",
-            detail="no /dev/input/event* devices were found",
-        )
-
-    ev_key = int(getattr(ecodes, "EV_KEY", 1))
-    btn_side = int(getattr(ecodes, "BTN_SIDE", 0x116))
-    btn_extra = int(getattr(ecodes, "BTN_EXTRA", 0x117))
-    side_button_codes = {btn_side, btn_extra}
-
-    accessible = 0
-    side_capable = 0
-    permission_denied = 0
-
-    for path in device_paths:
-        try:
-            device = input_device_ctor(path)
-        except PermissionError:
-            permission_denied += 1
-            continue
-        except Exception:
-            continue
-
-        try:
-            capabilities_obj = device.capabilities()
-            accessible += 1
-            if isinstance(capabilities_obj, dict):
-                keys_obj = capabilities_obj.get(ev_key, [])
-                keys = {int(code) for code in keys_obj if isinstance(code, int)}
-                if side_button_codes & keys:
-                    side_capable += 1
-        finally:
-            try:
-                device.close()
-            except Exception:
-                pass
-
-    if accessible == 0 and permission_denied > 0:
-        return DoctorCheck(
-            name="input-device-permissions",
-            status="fail",
-            detail=(
-                "cannot access /dev/input event devices (permission denied); "
-                + "add user to input group or configure udev rules"
-            ),
-        )
-
-    if accessible == 0:
-        return DoctorCheck(
-            name="input-device-permissions",
-            status="warn",
-            detail="no readable /dev/input event devices were found",
-        )
-
-    rear_button = config.rear_button if config is not None else "x2"
-    if side_capable == 0:
-        return DoctorCheck(
-            name="input-device-permissions",
-            status="warn",
-            detail=(
-                f"{accessible} input device(s) readable but none expose side-button codes "
-                + f"for rear={rear_button}"
-            ),
-        )
-
+def _check_input_device_permissions() -> DoctorCheck:
     return DoctorCheck(
         name="input-device-permissions",
         status="ok",
-        detail=(
-            f"{accessible} readable input device(s), "
-            + f"{side_capable} with side-button capability"
-        ),
+        detail="macOS uses Quartz for input capture",
     )
 
 
@@ -509,64 +337,143 @@ def _to_float(value: object) -> float:
     return 0.0
 
 
-def _check_hyprland_return_bind_conflict(config: AppConfig | None) -> DoctorCheck:
-    bind_path = Path.home() / ".config/hypr/UserConfigs/UserKeybinds.conf"
-    if not bind_path.exists():
+def _check_macos_app_bundle() -> DoctorCheck:
+    exe = sys.executable
+    if ".app/Contents/MacOS" in exe:
+        bundle_path = Path(exe).resolve()
+        for parent in bundle_path.parents:
+            if parent.suffix == ".app":
+                return DoctorCheck(
+                    name="macos-app-bundle",
+                    status="ok",
+                    detail=f"running from app bundle: {parent}",
+                )
         return DoctorCheck(
-            name="hyprland-bind-conflict",
-            status="warn",
-            detail=f"file not found: {bind_path}",
+            name="macos-app-bundle",
+            status="ok",
+            detail="running from app bundle",
         )
-
-    rear_button = config.rear_button if config is not None else "x2"
-    rear_mouse_code = "mouse:275" if rear_button == "x1" else "mouse:276"
-
-    lines = bind_path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    for idx, raw_line in enumerate(lines, start=1):
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if rear_mouse_code in line and "sendshortcut" in line and "Return" in line:
-            return DoctorCheck(
-                name="hyprland-bind-conflict",
-                status="fail",
-                detail=(
-                    f"conflicting return bind found at {bind_path}:{idx}; "
-                    + "disable it to let VibeMouse control rear-button behavior"
-                ),
-            )
-
     return DoctorCheck(
-        name="hyprland-bind-conflict",
-        status="ok",
-        detail=f"no conflicting {rear_mouse_code} return bind found",
+        name="macos-app-bundle",
+        status="info",
+        detail="running in development mode (not bundled as .app)",
     )
 
 
-def _check_user_service_state() -> DoctorCheck:
+def _check_macos_pyobjc() -> DoctorCheck:
+    try:
+        importlib.import_module("Quartz")
+    except Exception:
+        return DoctorCheck(
+            name="macos-pyobjc",
+            status="fail",
+            detail="cannot import Quartz; install with: pip install 'vibemouse'",
+        )
+
+    try:
+        importlib.import_module("AppKit")
+    except Exception:
+        return DoctorCheck(
+            name="macos-pyobjc",
+            status="fail",
+            detail="cannot import AppKit; install with: pip install 'vibemouse'",
+        )
+
+    return DoctorCheck(
+        name="macos-pyobjc",
+        status="ok",
+        detail="Quartz and AppKit available",
+    )
+
+
+def _check_macos_accessibility_permission() -> DoctorCheck:
+    try:
+        app_services = importlib.import_module("ApplicationServices")
+        is_trusted = getattr(app_services, "AXIsProcessTrusted", None)
+        if is_trusted is None:
+            return DoctorCheck(
+                name="macos-accessibility",
+                status="warn",
+                detail="AXIsProcessTrusted not available",
+            )
+        if is_trusted():
+            return DoctorCheck(
+                name="macos-accessibility",
+                status="ok",
+                detail="accessibility permission granted",
+            )
+        return DoctorCheck(
+            name="macos-accessibility",
+            status="fail",
+            detail=(
+                "accessibility permission not granted; "
+                "enable in System Settings > Privacy & Security > Accessibility"
+            ),
+        )
+    except Exception as error:
+        return DoctorCheck(
+            name="macos-accessibility",
+            status="warn",
+            detail=f"could not check accessibility permission: {error}",
+        )
+
+
+_LAUNCHAGENT_LABEL = "com.vibemouse.daemon"
+
+
+def _check_macos_launchagent_state() -> DoctorCheck:
+    plist_path = (
+        Path.home() / "Library" / "LaunchAgents" / f"{_LAUNCHAGENT_LABEL}.plist"
+    )
+    if not plist_path.exists():
+        return DoctorCheck(
+            name="macos-launchagent",
+            status="warn",
+            detail=f"plist not found: {plist_path}",
+        )
+
     probe = _run_subprocess(
-        ["systemctl", "--user", "is-active", "vibemouse.service"],
+        ["launchctl", "list", _LAUNCHAGENT_LABEL],
         timeout=3.0,
     )
     if probe is None:
         return DoctorCheck(
-            name="user-service",
+            name="macos-launchagent",
             status="warn",
-            detail="could not query service state",
+            detail="could not query launchctl state",
         )
 
-    state = probe.stdout.strip() or "unknown"
-    if state == "active":
+    if probe.returncode == 0:
         return DoctorCheck(
-            name="user-service",
+            name="macos-launchagent",
             status="ok",
-            detail="vibemouse.service is active",
+            detail=f"{_LAUNCHAGENT_LABEL} is loaded",
         )
 
     return DoctorCheck(
-        name="user-service",
+        name="macos-launchagent",
         status="warn",
-        detail=f"vibemouse.service state is {state}",
+        detail=f"{_LAUNCHAGENT_LABEL} plist exists but is not loaded",
+    )
+
+
+def _ensure_macos_launchagent_loaded() -> None:
+    plist_path = (
+        Path.home() / "Library" / "LaunchAgents" / f"{_LAUNCHAGENT_LABEL}.plist"
+    )
+    if not plist_path.exists():
+        return
+
+    probe = _run_subprocess(
+        ["launchctl", "list", _LAUNCHAGENT_LABEL],
+        timeout=3.0,
+    )
+    if probe is not None and probe.returncode == 0:
+        return
+
+    _ = _run_subprocess(
+        ["launchctl", "load", "-w", str(plist_path)],
+        timeout=5.0,
     )
 
 

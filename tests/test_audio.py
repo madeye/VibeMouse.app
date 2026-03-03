@@ -69,3 +69,35 @@ class AudioRecorderTests(unittest.TestCase):
             self.assertEqual(first.path.suffix, ".wav")
             self.assertEqual(second.path.suffix, ".wav")
             self.assertEqual(soundfile.sample_rates, [16000, 16000])
+
+    def test_device_stored_from_constructor(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="vibemouse-tests-") as tmp:
+            recorder = AudioRecorder(
+                sample_rate=16000,
+                channels=1,
+                dtype="float32",
+                temp_dir=Path(tmp),
+                device="USB Audio Device",
+            )
+            self.assertEqual(recorder._device, "USB Audio Device")
+
+    def test_empty_device_becomes_none(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="vibemouse-tests-") as tmp:
+            recorder = AudioRecorder(
+                sample_rate=16000,
+                channels=1,
+                dtype="float32",
+                temp_dir=Path(tmp),
+                device="",
+            )
+            self.assertIsNone(recorder._device)
+
+    def test_none_device_stays_none(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="vibemouse-tests-") as tmp:
+            recorder = AudioRecorder(
+                sample_rate=16000,
+                channels=1,
+                dtype="float32",
+                temp_dir=Path(tmp),
+            )
+            self.assertIsNone(recorder._device)

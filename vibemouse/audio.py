@@ -37,6 +37,7 @@ class _SoundDeviceModule(Protocol):
         channels: int,
         dtype: str,
         callback: Callable[[AudioFrame, int, object, object], None],
+        device: int | str | None = ...,
     ) -> _AudioStream: ...
 
 
@@ -46,12 +47,18 @@ class _SoundFileModule(Protocol):
 
 class AudioRecorder:
     def __init__(
-        self, sample_rate: int, channels: int, dtype: str, temp_dir: Path
+        self,
+        sample_rate: int,
+        channels: int,
+        dtype: str,
+        temp_dir: Path,
+        device: str | None = None,
     ) -> None:
         self._sample_rate: int = sample_rate
         self._channels: int = channels
         self._dtype: str = dtype
         self._temp_dir: Path = temp_dir
+        self._device: str | None = device if device else None
         self._sd: _SoundDeviceModule | None = None
         self._sf: _SoundFileModule | None = None
         self._lock: threading.Lock = threading.Lock()
@@ -83,6 +90,7 @@ class AudioRecorder:
                 channels=self._channels,
                 dtype=self._dtype,
                 callback=self._callback,
+                device=self._device,
             )
             stream.start()
             self._stream = stream

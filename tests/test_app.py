@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import tempfile
 import threading
 import unittest
@@ -19,49 +18,29 @@ class VoiceMouseAppWorkspaceTests(unittest.TestCase):
     def _make_subject() -> VoiceMouseApp:
         return object.__new__(VoiceMouseApp)
 
-    def test_switch_workspace_left_uses_expected_dispatcher(self) -> None:
+    def test_switch_workspace_delegates_to_system_integration(self) -> None:
         subject = self._make_subject()
-        switch = cast(Callable[[str], bool], getattr(subject, "_switch_workspace"))
-
-        with patch(
-            "vibemouse.app.subprocess.run",
-            return_value=SimpleNamespace(returncode=0, stdout="ok\n"),
-        ) as run_mock:
-            ok = switch("left")
-
-        self.assertTrue(ok)
-        self.assertEqual(
-            run_mock.call_args.args[0],
-            ["hyprctl", "dispatch", "workspace", "e-1"],
+        setattr(
+            subject,
+            "_system_integration",
+            SimpleNamespace(switch_workspace=lambda direction: True),
         )
-
-    def test_switch_workspace_right_uses_expected_dispatcher(self) -> None:
-        subject = self._make_subject()
         switch = cast(Callable[[str], bool], getattr(subject, "_switch_workspace"))
+        self.assertTrue(switch("left"))
 
-        with patch(
-            "vibemouse.app.subprocess.run",
-            return_value=SimpleNamespace(returncode=0, stdout="ok\n"),
-        ) as run_mock:
-            ok = switch("right")
+    def test_switch_workspace_returns_false_on_exception(self) -> None:
+        subject = self._make_subject()
 
-        self.assertTrue(ok)
-        self.assertEqual(
-            run_mock.call_args.args[0],
-            ["hyprctl", "dispatch", "workspace", "e+1"],
+        def fail_switch(direction: str) -> bool:
+            raise RuntimeError("workspace switch failed")
+
+        setattr(
+            subject,
+            "_system_integration",
+            SimpleNamespace(switch_workspace=fail_switch),
         )
-
-    def test_switch_workspace_returns_false_when_process_errors(self) -> None:
-        subject = self._make_subject()
         switch = cast(Callable[[str], bool], getattr(subject, "_switch_workspace"))
-
-        with patch(
-            "vibemouse.app.subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd=["hyprctl"], timeout=1.0),
-        ):
-            ok = switch("left")
-
-        self.assertFalse(ok)
+        self.assertFalse(switch("right"))
 
     def test_set_recording_status_writes_recording_payload(self) -> None:
         subject = self._make_subject()

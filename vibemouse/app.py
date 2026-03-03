@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
+from vibemouse import audio_feedback
 from vibemouse.audio import AudioRecorder, AudioRecording
 from vibemouse.config import AppConfig
 from vibemouse.mouse_listener import SideButtonListener
@@ -18,7 +19,12 @@ TranscriptionTarget = Literal["default", "openclaw"]
 
 
 class VoiceMouseApp:
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(
+        self,
+        config: AppConfig,
+        *,
+        on_status_change: Callable[[bool], None] | None = None,
+    ) -> None:
         if config.front_button == config.rear_button:
             raise ValueError("Front and rear side buttons must be different")
 
@@ -29,6 +35,7 @@ class VoiceMouseApp:
             channels=config.channels,
             dtype=config.dtype,
             temp_dir=config.temp_dir,
+            device=config.audio_input_device or None,
         )
         self._transcriber: SenseVoiceTranscriber = SenseVoiceTranscriber(config)
         self._output: TextOutput = TextOutput(
@@ -48,10 +55,10 @@ class VoiceMouseApp:
             gestures_enabled=config.gestures_enabled,
             gesture_trigger_button=config.gesture_trigger_button,
             gesture_threshold_px=config.gesture_threshold_px,
-            gesture_freeze_pointer=config.gesture_freeze_pointer,
             gesture_restore_cursor=config.gesture_restore_cursor,
             system_integration=self._system_integration,
         )
+        self._on_status_change_callback = on_status_change
         self._stop_event: threading.Event = threading.Event()
         self._transcribe_lock: threading.Lock = threading.Lock()
         self._workers_lock: threading.Lock = threading.Lock()
@@ -70,7 +77,6 @@ class VoiceMouseApp:
             + f"gestures_enabled={self._config.gestures_enabled}, "
             + f"gesture_trigger={self._config.gesture_trigger_button}, "
             + f"gesture_threshold_px={self._config.gesture_threshold_px}, "
-            + f"gesture_freeze_pointer={self._config.gesture_freeze_pointer}, "
             + f"gesture_restore_cursor={self._config.gesture_restore_cursor}, "
             + f"prewarm_on_start={self._config.prewarm_on_start}, "
             + f"prewarm_delay_s={self._config.prewarm_delay_s}. "
@@ -195,29 +201,9 @@ class VoiceMouseApp:
 
     def _switch_workspace(self, direction: str) -> bool:
         try:
-            system_integration = self._system_integration
-        except AttributeError:
-            system_integration = None
-
-        if system_integration is not None:
-            try:
-                return bool(system_integration.switch_workspace(direction))
-            except Exception:
-                return False
-
-        workspace_arg = "e-1" if direction == "left" else "e+1"
-        try:
-            proc = subprocess.run(
-                ["hyprctl", "dispatch", "workspace", workspace_arg],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=1.0,
-            )
-        except (OSError, subprocess.TimeoutExpired):
+            return bool(self._system_integration.switch_workspace(direction))
+        except Exception:
             return False
-
-        return proc.returncode == 0 and proc.stdout.strip() == "ok"
 
     def _stop_recording(self) -> AudioRecording | None:
         try:
@@ -352,4 +338,18 @@ class VoiceMouseApp:
             _ = tmp_path.write_text(json.dumps(payload), encoding="utf-8")
             _ = tmp_path.replace(path)
         except Exception:
-            return
+            pass
+
+        config = getattr(self, "_config", None)
+        if config is not None and getattr(config, "audio_feedback", False):
+            if is_recording:
+                audio_feedback.play_start_tone()
+            else:
+                audio_feedback.play_stop_tone()
+
+        callback = getattr(self, "_on_status_change_callback", None)
+        if callback is not None:
+            try:
+                callback(is_recording)
+            except Exception:
+                pass

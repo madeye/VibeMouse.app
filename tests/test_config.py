@@ -18,7 +18,6 @@ class LoadConfigTests(unittest.TestCase):
         self.assertFalse(config.gestures_enabled)
         self.assertEqual(config.gesture_trigger_button, "rear")
         self.assertEqual(config.gesture_threshold_px, 120)
-        self.assertTrue(config.gesture_freeze_pointer)
         self.assertTrue(config.gesture_restore_cursor)
         self.assertEqual(config.gesture_up_action, "record_toggle")
         self.assertEqual(config.gesture_down_action, "noop")
@@ -35,6 +34,7 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(config.openclaw_retries, 0)
         self.assertEqual(config.front_button, "x1")
         self.assertEqual(config.rear_button, "x2")
+        self.assertEqual(config.audio_input_device, "")
 
     def test_trust_remote_code_can_be_enabled(self) -> None:
         with patch.dict(
@@ -61,16 +61,6 @@ class LoadConfigTests(unittest.TestCase):
             config = load_config()
 
         self.assertTrue(config.gestures_enabled)
-
-    def test_gesture_freeze_pointer_can_be_disabled(self) -> None:
-        with patch.dict(
-            os.environ,
-            {"VIBEMOUSE_GESTURE_FREEZE_POINTER": "false"},
-            clear=True,
-        ):
-            config = load_config()
-
-        self.assertFalse(config.gesture_freeze_pointer)
 
     def test_gesture_restore_cursor_can_be_disabled(self) -> None:
         with patch.dict(
@@ -302,3 +292,33 @@ class LoadConfigTests(unittest.TestCase):
                 "VIBEMOUSE_FRONT_BUTTON and VIBEMOUSE_REAR_BUTTON must differ",
             ):
                 _ = load_config()
+
+    def test_audio_input_device_reads_from_env(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"VIBEMOUSE_AUDIO_INPUT_DEVICE": "USB Audio Device"},
+            clear=True,
+        ):
+            config = load_config()
+
+        self.assertEqual(config.audio_input_device, "USB Audio Device")
+
+    def test_audio_input_device_normalizes_default(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"VIBEMOUSE_AUDIO_INPUT_DEVICE": "default"},
+            clear=True,
+        ):
+            config = load_config()
+
+        self.assertEqual(config.audio_input_device, "")
+
+    def test_audio_input_device_normalizes_default_case_insensitive(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"VIBEMOUSE_AUDIO_INPUT_DEVICE": "Default"},
+            clear=True,
+        ):
+            config = load_config()
+
+        self.assertEqual(config.audio_input_device, "")

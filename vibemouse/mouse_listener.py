@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import importlib
-import json
-import subprocess
 import threading
 import time
 from collections.abc import Callable
-from typing import Protocol, cast
 
 from vibemouse.system_integration import SystemIntegration, create_system_integration
 
@@ -27,7 +24,6 @@ class SideButtonListener:
         gestures_enabled: bool = False,
         gesture_trigger_button: str = "rear",
         gesture_threshold_px: int = 120,
-        gesture_freeze_pointer: bool = True,
         gesture_restore_cursor: bool = True,
         system_integration: SystemIntegration | None = None,
     ) -> None:
@@ -44,14 +40,12 @@ class SideButtonListener:
         self._gestures_enabled: bool = gestures_enabled
         self._gesture_trigger_button: str = gesture_trigger_button
         self._gesture_threshold_px: int = max(1, gesture_threshold_px)
-        self._gesture_freeze_pointer: bool = gesture_freeze_pointer
         self._gesture_restore_cursor: bool = gesture_restore_cursor
         self._system_integration: SystemIntegration = (
             system_integration
             if system_integration is not None
             else create_system_integration()
         )
-        self._hyprland_session: bool = self._system_integration.is_hyprland
         self._last_front_press_monotonic: float = 0.0
         self._last_rear_press_monotonic: float = 0.0
         self._debounce_lock: threading.Lock = threading.Lock()
@@ -61,7 +55,6 @@ class SideButtonListener:
         self._gesture_dy: int = 0
         self._gesture_last_position: tuple[int, int] | None = None
         self._gesture_anchor_cursor: tuple[int, int] | None = None
-        self._gesture_grabbed_device: _EvdevDevice | None = None
         self._stop: threading.Event = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -74,7 +67,6 @@ class SideButtonListener:
 
     def stop(self) -> None:
         self._stop.set()
-        self._release_gesture_grab()
         if self._thread is not None:
             self._thread.join(timeout=2)
 
@@ -82,177 +74,109 @@ class SideButtonListener:
         last_error_summary: str | None = None
         while not self._stop.is_set():
             try:
-                self._run_evdev()
+                self._run_quartz()
                 return
-            except Exception as evdev_error:
-                try:
-                    self._run_pynput()
-                    return
-                except Exception as pynput_error:
-                    summary = (
-                        "Mouse listener backends unavailable "
-                        + f"(evdev: {evdev_error}; pynput: {pynput_error}). Retrying..."
-                    )
-                    if summary != last_error_summary:
-                        print(summary)
-                        last_error_summary = summary
-                    if self._stop.wait(1.0):
-                        return
-
-    def _run_evdev(self) -> None:
-        import select
-
-        try:
-            evdev_module = importlib.import_module("evdev")
-        except Exception as error:
-            raise RuntimeError("evdev is not available") from error
-
-        input_device_ctor = cast(_InputDeviceCtor, getattr(evdev_module, "InputDevice"))
-        ecodes = cast(_Ecodes, getattr(evdev_module, "ecodes"))
-        list_devices = cast(_ListDevicesFn, getattr(evdev_module, "list_devices"))
-
-        side_codes = {
-            "x1": ecodes.BTN_SIDE,
-            "x2": ecodes.BTN_EXTRA,
-        }
-        front_code = side_codes[self._front_button]
-        rear_code = side_codes[self._rear_button]
-        trigger_code: int | None = None
-        if self._gestures_enabled and self._gesture_trigger_button == "right":
-            trigger_code = ecodes.BTN_RIGHT
-
-        devices: list[_EvdevDevice] = []
-        for path in list_devices():
-            try:
-                dev = input_device_ctor(path)
-            except Exception:
-                continue
-            try:
-                caps = dev.capabilities()
-                key_cap = caps.get(ecodes.EV_KEY, [])
-                required_codes = {front_code, rear_code}
-                if trigger_code is not None:
-                    required_codes.add(trigger_code)
-                if not any(code in key_cap for code in required_codes):
-                    dev.close()
-                    continue
-
-                btn_mouse = getattr(ecodes, "BTN_MOUSE", None)
-                has_pointer_button = ecodes.BTN_LEFT in key_cap or (
-                    isinstance(btn_mouse, int) and btn_mouse in key_cap
+            except Exception as quartz_error:
+                summary = (
+                    f"Mouse listener backend unavailable (quartz: {quartz_error}). Retrying..."
                 )
-                if not has_pointer_button:
-                    dev.close()
-                    continue
+                if summary != last_error_summary:
+                    print(summary)
+                    last_error_summary = summary
+                if self._stop.wait(1.0):
+                    return
 
-                devices.append(dev)
-            except Exception:
-                dev.close()
+    def _run_quartz(self) -> None:
+        """Use NSEvent global monitors to capture mouse side buttons on macOS.
 
-        if not devices:
-            raise RuntimeError("No input device with side-button capability found")
-
+        NSEvent.addGlobalMonitorForEventsMatchingMask:handler: hooks into the
+        main thread's NSApplication run loop, so it works even though this
+        method runs on a daemon thread.
+        """
         try:
-            fd_map: dict[int, _EvdevDevice] = {dev.fd: dev for dev in devices}
-            while not self._stop.is_set():
-                ready, _, _ = select.select(list(fd_map.keys()), [], [], 0.2)
-                for fd in ready:
-                    dev = fd_map[fd]
-                    for event in dev.read():
-                        if event.type == ecodes.EV_KEY:
-                            button_label: str | None = None
-                            if event.code == front_code:
-                                button_label = "front"
-                            elif event.code == rear_code:
-                                button_label = "rear"
-                            elif (
-                                trigger_code is not None and event.code == trigger_code
-                            ):
-                                button_label = "right"
-
-                            if button_label is None:
-                                continue
-
-                            if (
-                                self._gestures_enabled
-                                and self._is_gesture_trigger_button(button_label)
-                            ):
-                                if event.value == 1:
-                                    self._start_gesture_capture(source_device=dev)
-                                elif event.value == 0:
-                                    self._finish_gesture_capture(button_label)
-                                continue
-
-                            if event.value == 1:
-                                self._dispatch_click(button_label)
-                            continue
-
-                        if (
-                            self._gestures_enabled
-                            and event.type == ecodes.EV_REL
-                            and self._gesture_active
-                        ):
-                            if event.code == ecodes.REL_X:
-                                self._accumulate_gesture_delta(dx=event.value, dy=0)
-                            elif event.code == ecodes.REL_Y:
-                                self._accumulate_gesture_delta(dx=0, dy=event.value)
-        finally:
-            self._release_gesture_grab()
-            for dev in devices:
-                dev.close()
-
-    def _run_pynput(self) -> None:
-        try:
-            mouse_module = importlib.import_module("pynput.mouse")
+            AppKit = importlib.import_module("AppKit")
+            NSEvent = getattr(AppKit, "NSEvent")
         except Exception as error:
-            raise RuntimeError("pynput.mouse is not available") from error
+            raise RuntimeError("AppKit is not available") from error
 
-        listener_ctor = cast(_MouseListenerCtor, getattr(mouse_module, "Listener"))
+        # NSEvent button numbers: 0=left, 1=right, 2=middle, 3=back, 4=forward
+        ns_button_map: dict[str, int] = {"x1": 3, "x2": 4}
+        front_button_num = ns_button_map[self._front_button]
+        rear_button_num = ns_button_map[self._rear_button]
 
-        button_map = {
-            "x1": {"x1", "x_button1", "button8"},
-            "x2": {"x2", "x_button2", "button9"},
-        }
+        # NSEventType constants
+        NS_OTHER_MOUSE_DOWN = 25
+        NS_OTHER_MOUSE_UP = 26
+        NS_RIGHT_MOUSE_DOWN = 3
+        NS_RIGHT_MOUSE_UP = 4
+        NS_MOUSE_MOVED = 5
 
-        front_candidates = button_map[self._front_button]
-        rear_candidates = button_map[self._rear_button]
-        right_candidates = {"right", "button2"}
+        # NSEventMask constants
+        mask: int = (1 << NS_OTHER_MOUSE_DOWN) | (1 << NS_OTHER_MOUSE_UP)
+        if self._gestures_enabled:
+            mask |= 1 << NS_MOUSE_MOVED
+            if self._gesture_trigger_button == "right":
+                mask |= (1 << NS_RIGHT_MOUSE_DOWN) | (1 << NS_RIGHT_MOUSE_UP)
 
-        def on_click(x: int, y: int, button: object, pressed: bool) -> None:
-            btn_name = str(button).lower().split(".")[-1]
-            button_label: str | None = None
-            if btn_name in front_candidates:
-                button_label = "front"
-            elif btn_name in rear_candidates:
-                button_label = "rear"
-            elif btn_name in right_candidates:
-                button_label = "right"
+        def handler(event: object) -> None:
+            event_type: int = event.type()  # type: ignore[union-attr]
+            button_num: int = event.buttonNumber()  # type: ignore[union-attr]
 
-            if button_label is None:
-                return
+            if event_type in (NS_OTHER_MOUSE_DOWN, NS_OTHER_MOUSE_UP):
+                pressed = event_type == NS_OTHER_MOUSE_DOWN
 
-            if self._gestures_enabled and self._is_gesture_trigger_button(button_label):
-                if pressed:
-                    self._start_gesture_capture(initial_position=(x, y))
-                else:
-                    self._finish_gesture_capture(button_label)
-                return
+                button_label: str | None = None
+                if button_num == front_button_num:
+                    button_label = "front"
+                elif button_num == rear_button_num:
+                    button_label = "rear"
 
-            if pressed:
-                self._dispatch_click(button_label)
+                if button_label is not None:
+                    if (
+                        self._gestures_enabled
+                        and self._is_gesture_trigger_button(button_label)
+                    ):
+                        if pressed:
+                            loc = event.locationInWindow()  # type: ignore[union-attr]
+                            self._start_gesture_capture(
+                                initial_position=(int(loc.x), int(loc.y))
+                            )
+                        else:
+                            self._finish_gesture_capture(button_label)
+                    elif pressed:
+                        self._dispatch_click(button_label)
 
-        def on_move(x: int, y: int) -> None:
-            if not self._gestures_enabled:
-                return
-            self._accumulate_gesture_position(x, y)
+            elif event_type in (NS_RIGHT_MOUSE_DOWN, NS_RIGHT_MOUSE_UP):
+                if (
+                    self._gestures_enabled
+                    and self._gesture_trigger_button == "right"
+                ):
+                    pressed = event_type == NS_RIGHT_MOUSE_DOWN
+                    if pressed:
+                        loc = event.locationInWindow()  # type: ignore[union-attr]
+                        self._start_gesture_capture(
+                            initial_position=(int(loc.x), int(loc.y))
+                        )
+                    else:
+                        self._finish_gesture_capture("right")
 
-        listener = listener_ctor(on_click=on_click, on_move=on_move)
-        listener.start()
+            elif event_type == NS_MOUSE_MOVED and self._gestures_enabled:
+                loc = event.locationInWindow()  # type: ignore[union-attr]
+                self._accumulate_gesture_position(int(loc.x), int(loc.y))
+
+        monitor = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
+            mask, handler
+        )
+        if monitor is None:
+            raise RuntimeError(
+                "Failed to create NSEvent global monitor — check Accessibility permissions"
+            )
+
         try:
             while not self._stop.is_set():
-                time.sleep(0.2)
+                self._stop.wait(0.5)
         finally:
-            listener.stop()
+            NSEvent.removeMonitor_(monitor)
 
     def _dispatch_click(self, button_label: str) -> None:
         if button_label == "front":
@@ -269,9 +193,7 @@ class SideButtonListener:
         self,
         *,
         initial_position: tuple[int, int] | None = None,
-        source_device: _EvdevDevice | None = None,
     ) -> None:
-        should_grab = False
         with self._gesture_lock:
             self._gesture_active = True
             self._gesture_dx = 0
@@ -281,17 +203,6 @@ class SideButtonListener:
                 self._gesture_anchor_cursor = self._read_cursor_position()
             else:
                 self._gesture_anchor_cursor = None
-            should_grab = self._gesture_freeze_pointer and source_device is not None
-
-        if should_grab and source_device is not None:
-            self._try_grab_device(source_device)
-
-    def _accumulate_gesture_delta(self, *, dx: int, dy: int) -> None:
-        with self._gesture_lock:
-            if not self._gesture_active:
-                return
-            self._gesture_dx += dx
-            self._gesture_dy += dy
 
     def _accumulate_gesture_position(self, x: int, y: int) -> None:
         with self._gesture_lock:
@@ -318,8 +229,6 @@ class SideButtonListener:
             anchor_cursor = self._gesture_anchor_cursor
             self._gesture_anchor_cursor = None
 
-        self._release_gesture_grab()
-
         direction = self._classify_gesture(dx, dy, self._gesture_threshold_px)
         if direction is None:
             self._dispatch_click(button_label)
@@ -334,94 +243,17 @@ class SideButtonListener:
             return
         callback(direction)
 
-    def _try_grab_device(self, device: _EvdevDevice) -> None:
-        try:
-            device.grab()
-        except Exception:
-            return
-
-        with self._gesture_lock:
-            self._gesture_grabbed_device = device
-
-    def _release_gesture_grab(self) -> None:
-        with self._gesture_lock:
-            grabbed = self._gesture_grabbed_device
-            self._gesture_grabbed_device = None
-
-        if grabbed is None:
-            return
-
-        try:
-            grabbed.ungrab()
-        except Exception:
-            return
-
     def _read_cursor_position(self) -> tuple[int, int] | None:
         try:
-            system_integration = self._system_integration
-        except AttributeError:
-            system_integration = None
-
-        if system_integration is not None:
-            try:
-                return system_integration.cursor_position()
-            except Exception:
-                return None
-
-        if not self._hyprland_session:
+            return self._system_integration.cursor_position()
+        except Exception:
             return None
-        try:
-            proc = subprocess.run(
-                ["hyprctl", "-j", "cursorpos"],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=0.8,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            return None
-
-        if proc.returncode != 0:
-            return None
-
-        try:
-            payload = cast(dict[str, object], json.loads(proc.stdout))
-        except json.JSONDecodeError:
-            return None
-
-        x_raw = payload.get("x")
-        y_raw = payload.get("y")
-        if not isinstance(x_raw, int | float) or not isinstance(y_raw, int | float):
-            return None
-        return int(x_raw), int(y_raw)
 
     def _restore_cursor_position(self, position: tuple[int, int]) -> None:
-        try:
-            system_integration = self._system_integration
-        except AttributeError:
-            system_integration = None
-
-        if system_integration is not None:
-            x, y = position
-            try:
-                _ = system_integration.move_cursor(x=x, y=y)
-            except Exception:
-                return
-            return
-
-        if not self._hyprland_session:
-            return
-
         x, y = position
         try:
-            _ = subprocess.run(
-                ["hyprctl", "dispatch", "movecursor", str(x), str(y)],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=0.8,
-            )
-        except (OSError, subprocess.TimeoutExpired):
+            self._system_integration.move_cursor(x=x, y=y)
+        except Exception:
             return
 
     @staticmethod
@@ -455,57 +287,3 @@ class SideButtonListener:
                 return False
             self._last_rear_press_monotonic = now
             return True
-
-
-class _EvdevEvent(Protocol):
-    type: int
-    value: int
-    code: int
-
-
-class _EvdevDevice(Protocol):
-    fd: int
-
-    def read(self) -> list[_EvdevEvent]: ...
-
-    def capabilities(self) -> dict[int, list[int]]: ...
-
-    def grab(self) -> None: ...
-
-    def ungrab(self) -> None: ...
-
-    def close(self) -> None: ...
-
-
-class _InputDeviceCtor(Protocol):
-    def __call__(self, path: str) -> _EvdevDevice: ...
-
-
-class _ListDevicesFn(Protocol):
-    def __call__(self) -> list[str]: ...
-
-
-class _Ecodes(Protocol):
-    BTN_SIDE: int
-    BTN_EXTRA: int
-    BTN_LEFT: int
-    BTN_RIGHT: int
-    EV_KEY: int
-    EV_REL: int
-    REL_X: int
-    REL_Y: int
-
-
-class _MouseListener(Protocol):
-    def start(self) -> None: ...
-
-    def stop(self) -> None: ...
-
-
-class _MouseListenerCtor(Protocol):
-    def __call__(
-        self,
-        *,
-        on_click: Callable[[int, int, object, bool], None],
-        on_move: Callable[[int, int], None] | None = None,
-    ) -> _MouseListener: ...

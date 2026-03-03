@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "vibemouse"
 version = "0.1.0"
-description = "Mouse side-button voice dictation with SenseVoice"
+description = "macOS mouse side-button voice dictation with SenseVoice"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
@@ -19,20 +19,29 @@ dependencies = [
   "sounddevice>=0.4.6",
   "soundfile>=0.12.1",
   "pynput>=1.7.7",
-  "evdev>=1.7.1",
-  "PyGObject>=3.46.0",
   "pyperclip>=1.9.0",
-  "funasr-onnx>=0.4.1",
-  "onnxruntime>=1.24.0",
-  "modelscope>=1.18.0",
+  "onnxruntime>=1.16.0",
+  "kaldi-native-fbank>=1.18",
+  "sentencepiece>=0.2.0",
+  "PyYAML>=6.0",
+  "pyobjc-framework-Quartz>=10.0",
+  "pyobjc-framework-Cocoa>=10.0",
+  "pyobjc-framework-AVFoundation>=10.0",
 ]
 
 [project.optional-dependencies]
 pt = [
   "funasr>=1.2.6",
 ]
+download = [
+  "modelscope>=1.18.0",
+]
 npu = [
   "openvino>=2026.0.0",
+]
+dev = [
+  "pyinstaller>=6.0",
+  "pytest>=7.0",
 ]
 
 [project.scripts]
@@ -40,6 +49,9 @@ vibemouse = "vibemouse.main:main"
 
 [tool.setuptools]
 package-dir = {"" = "."}
+
+[tool.setuptools.package-data]
+vibemouse = ["models/**/*"]
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -91,7 +91,6 @@ class AppConfig:
     gestures_enabled: bool
     gesture_trigger_button: str
     gesture_threshold_px: int
-    gesture_freeze_pointer: bool
     gesture_restore_cursor: bool
     gesture_up_action: str
     gesture_down_action: str
@@ -99,6 +98,7 @@ class AppConfig:
     gesture_right_action: str
     enter_mode: str
     auto_paste: bool
+    audio_feedback: bool
     trust_remote_code: bool
     prewarm_on_start: bool
     prewarm_delay_s: float
@@ -110,6 +110,7 @@ class AppConfig:
     front_button: str
     rear_button: str
     temp_dir: Path
+    audio_input_device: str
 
 
 def load_config() -> AppConfig:
@@ -151,7 +152,6 @@ def load_config() -> AppConfig:
         "VIBEMOUSE_GESTURE_THRESHOLD_PX",
         _read_int("VIBEMOUSE_GESTURE_THRESHOLD_PX", 120),
     )
-    gesture_freeze_pointer = _read_bool("VIBEMOUSE_GESTURE_FREEZE_POINTER", True)
     gesture_restore_cursor = _read_bool("VIBEMOUSE_GESTURE_RESTORE_CURSOR", True)
     gesture_actions = {
         "record_toggle",
@@ -203,6 +203,10 @@ def load_config() -> AppConfig:
         _read_float("VIBEMOUSE_PREWARM_DELAY_S", 0.0),
     )
 
+    audio_input_device_raw = os.getenv("VIBEMOUSE_AUDIO_INPUT_DEVICE", "").strip()
+    if audio_input_device_raw.lower() == "default":
+        audio_input_device_raw = ""
+
     return AppConfig(
         sample_rate=sample_rate,
         channels=channels,
@@ -223,7 +227,6 @@ def load_config() -> AppConfig:
         gestures_enabled=gestures_enabled,
         gesture_trigger_button=gesture_trigger_button,
         gesture_threshold_px=gesture_threshold_px,
-        gesture_freeze_pointer=gesture_freeze_pointer,
         gesture_restore_cursor=gesture_restore_cursor,
         gesture_up_action=gesture_up_action,
         gesture_down_action=gesture_down_action,
@@ -231,6 +234,7 @@ def load_config() -> AppConfig:
         gesture_right_action=gesture_right_action,
         enter_mode=enter_mode,
         auto_paste=_read_bool("VIBEMOUSE_AUTO_PASTE", False),
+        audio_feedback=_read_bool("VIBEMOUSE_AUDIO_FEEDBACK", True),
         trust_remote_code=_read_bool("VIBEMOUSE_TRUST_REMOTE_CODE", False),
         prewarm_on_start=_read_bool("VIBEMOUSE_PREWARM_ON_START", True),
         prewarm_delay_s=prewarm_delay_s,
@@ -242,4 +246,5 @@ def load_config() -> AppConfig:
         front_button=front_button,
         rear_button=rear_button,
         temp_dir=temp_dir,
+        audio_input_device=audio_input_device_raw,
     )

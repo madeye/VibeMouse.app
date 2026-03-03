@@ -56,13 +56,14 @@ class MainEntryTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(app_instance.run.call_count, 1)
 
-    def test_deploy_subcommand_dispatches_to_deploy(self) -> None:
+    def test_unknown_subcommand_falls_through_to_run(self) -> None:
+        app_instance = MagicMock()
+        cfg = SimpleNamespace()
         with (
-            patch("vibemouse.main.run_deploy", return_value=5) as run_deploy,
-            patch("vibemouse.main.load_config") as load_config,
+            patch("vibemouse.main.load_config", return_value=cfg),
+            patch("vibemouse.main.VoiceMouseApp", return_value=app_instance),
         ):
-            rc = main(["deploy", "--dry-run"])
+            rc = main(["run"])
 
-        self.assertEqual(rc, 5)
-        self.assertEqual(run_deploy.call_count, 1)
-        self.assertEqual(load_config.call_count, 0)
+        self.assertEqual(rc, 0)
+        self.assertEqual(app_instance.run.call_count, 1)

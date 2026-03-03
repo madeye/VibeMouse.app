@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import sys
 from pathlib import Path
 from threading import Lock
 from typing import Protocol, cast
@@ -217,17 +218,14 @@ class _FunASRBackend:
 class _FunASRONNXBackend:
     def __init__(self, config: AppConfig) -> None:
         self._config: AppConfig = config
-        self._model: _ONNXSenseVoiceModel | None = None
-        self._postprocess: _PostprocessFn | None = None
+        self._model: _SenseVoiceONNXModel | None = None
         self._load_lock: Lock = Lock()
         self.device_in_use: str = "cpu"
         self._ensure_model_loaded()
 
     def transcribe(self, audio_path: Path) -> str:
         if self._model is None:
-            raise RuntimeError("funasr_onnx SenseVoice model is not initialized")
-        if self._postprocess is None:
-            raise RuntimeError("funasr postprocess function is not initialized")
+            raise RuntimeError("SenseVoice ONNX model is not initialized")
 
         textnorm = "withitn" if self._config.use_itn else "woitn"
         result = self._model(
@@ -238,8 +236,7 @@ class _FunASRONNXBackend:
         if not result:
             return ""
 
-        raw_text = result[0]
-        return self._postprocess(raw_text).strip()
+        return result[0].strip()
 
     def _ensure_model_loaded(self) -> None:
         if self._model is not None:
@@ -248,52 +245,26 @@ class _FunASRONNXBackend:
         with self._load_lock:
             if self._model is not None:
                 return
+
+            from vibemouse.sensevoice_onnx import SenseVoiceONNX
+
+            model_dir = self._resolve_onnx_model_dir()
+            self._ensure_tokenizer_file(model_dir)
+
             try:
-                SenseVoiceSmall = self._load_onnx_class()
-                postprocess = self._load_postprocess()
+                self._model = SenseVoiceONNX(model_dir)
+                self.device_in_use = "cpu"
             except Exception as error:
                 raise RuntimeError(
-                    "funasr_onnx backend requires funasr-onnx package"
+                    f"Failed to load SenseVoice ONNX model from {model_dir}: {error}"
                 ) from error
 
-            requested_path = self._resolve_onnx_model_dir()
-            self._ensure_tokenizer_file(requested_path)
-            device_id = self._resolve_onnx_device_id(self._config.device)
-
-            try:
-                model = SenseVoiceSmall(
-                    model_dir=str(requested_path),
-                    batch_size=1,
-                    device_id=device_id,
-                    quantize=True,
-                    cache_dir=None,
-                )
-                self._model = model
-                self._postprocess = postprocess
-                self.device_in_use = self._resolve_device_label(self._config.device)
-                return
-            except Exception as primary_error:
-                if not self._config.fallback_to_cpu:
-                    raise RuntimeError(
-                        f"Failed to load funasr_onnx backend on {self._config.device}: {primary_error}"
-                    ) from primary_error
-
-            try:
-                model = SenseVoiceSmall(
-                    model_dir=str(requested_path),
-                    batch_size=1,
-                    device_id="-1",
-                    quantize=True,
-                    cache_dir=None,
-                )
-            except Exception as cpu_error:
-                raise RuntimeError(
-                    f"Failed to load funasr_onnx backend on {self._config.device} and cpu fallback: {cpu_error}"
-                ) from cpu_error
-
-            self._model = model
-            self._postprocess = postprocess
-            self.device_in_use = "cpu"
+    @staticmethod
+    def _bundled_model_dir() -> Path | None:
+        bundled = Path(__file__).parent / "models" / "SenseVoiceSmall"
+        if bundled.is_dir() and _FunASRONNXBackend._contains_onnx_model(bundled):
+            return bundled
+        return None
 
     def _resolve_onnx_model_dir(self) -> Path:
         raw_model = self._config.model_name
@@ -302,7 +273,17 @@ class _FunASRONNXBackend:
             canonical_model = "iic/SenseVoiceSmall-onnx"
 
         if canonical_model.startswith("iic/"):
-            return self._download_modelscope_snapshot(canonical_model)
+            bundled = self._bundled_model_dir()
+            if bundled is not None:
+                return bundled
+
+            macos_cached = self._check_macos_model_cache(canonical_model)
+            if macos_cached is not None:
+                return macos_cached
+
+            downloaded = self._download_modelscope_snapshot(canonical_model)
+            self._populate_macos_model_cache(canonical_model, downloaded)
+            return downloaded
 
         path_candidate = Path(canonical_model)
         if not path_candidate.exists():
@@ -314,6 +295,39 @@ class _FunASRONNXBackend:
         raise RuntimeError(
             f"ONNX model directory {path_candidate} exists but model_quant.onnx/model.onnx is missing"
         )
+
+    @staticmethod
+    def _macos_model_cache_dir(model_id: str) -> Path:
+        return (
+            Path.home()
+            / "Library"
+            / "Application Support"
+            / "VibeMouse"
+            / "models"
+            / model_id.replace("/", "_")
+        )
+
+    @staticmethod
+    def _check_macos_model_cache(model_id: str) -> Path | None:
+        if sys.platform != "darwin":
+            return None
+        cache_dir = _FunASRONNXBackend._macos_model_cache_dir(model_id)
+        if cache_dir.is_dir() and _FunASRONNXBackend._contains_onnx_model(cache_dir):
+            return cache_dir
+        return None
+
+    @staticmethod
+    def _populate_macos_model_cache(model_id: str, source_dir: Path) -> None:
+        if sys.platform != "darwin":
+            return
+        cache_dir = _FunASRONNXBackend._macos_model_cache_dir(model_id)
+        if cache_dir.exists():
+            return
+        try:
+            cache_dir.parent.mkdir(parents=True, exist_ok=True)
+            cache_dir.symlink_to(source_dir)
+        except OSError:
+            pass
 
     @staticmethod
     def _contains_onnx_model(model_dir: Path) -> bool:
@@ -344,23 +358,6 @@ class _FunASRONNXBackend:
             )
         return model_dir
 
-    @staticmethod
-    def _resolve_onnx_device_id(device: str) -> str:
-        normalized = device.strip().lower()
-        if normalized == "cpu":
-            return "-1"
-        if normalized.startswith("cuda"):
-            parts = normalized.split(":", 1)
-            return parts[1] if len(parts) > 1 and parts[1] else "0"
-        return "-1"
-
-    @staticmethod
-    def _resolve_device_label(device: str) -> str:
-        normalized = device.strip().lower()
-        if normalized.startswith("cuda"):
-            return normalized
-        return "cpu"
-
     def _ensure_tokenizer_file(self, model_dir: Path) -> None:
         target = model_dir / "chn_jpn_yue_eng_ko_spectok.bpe.model"
         if target.exists():
@@ -378,22 +375,6 @@ class _FunASRONNXBackend:
         raise RuntimeError(
             "Tokenizer file chn_jpn_yue_eng_ko_spectok.bpe.model is missing and no fallback was found"
         )
-
-    @staticmethod
-    def _load_onnx_class() -> _ONNXSenseVoiceCtor:
-        module = importlib.import_module("funasr_onnx")
-        return cast(_ONNXSenseVoiceCtor, getattr(module, "SenseVoiceSmall"))
-
-    @staticmethod
-    def _load_postprocess() -> _PostprocessFn:
-        try:
-            post_module = importlib.import_module("funasr.utils.postprocess_utils")
-            return cast(
-                _PostprocessFn,
-                getattr(post_module, "rich_transcription_postprocess"),
-            )
-        except Exception:
-            return lambda text: text
 
 
 class _TranscriberProtocol(Protocol):
@@ -428,7 +409,7 @@ class _PostprocessFn(Protocol):
     def __call__(self, text: str) -> str: ...
 
 
-class _ONNXSenseVoiceModel(Protocol):
+class _SenseVoiceONNXModel(Protocol):
     def __call__(
         self,
         wav_content: str,
@@ -436,18 +417,6 @@ class _ONNXSenseVoiceModel(Protocol):
         language: str,
         textnorm: str,
     ) -> list[str]: ...
-
-
-class _ONNXSenseVoiceCtor(Protocol):
-    def __call__(
-        self,
-        *,
-        model_dir: str,
-        batch_size: int,
-        device_id: str,
-        quantize: bool,
-        cache_dir: str | None,
-    ) -> _ONNXSenseVoiceModel: ...
 
 
 class _SnapshotDownloadFn(Protocol):

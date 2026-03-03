@@ -1,150 +1,292 @@
 from __future__ import annotations
 
-import subprocess
 import unittest
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from vibemouse.system_integration import (
-    HyprlandSystemIntegration,
     MacOSSystemIntegration,
-    NoopSystemIntegration,
-    WindowsSystemIntegration,
+    _MACOS_TERMINAL_BUNDLE_IDS,
     create_system_integration,
-    detect_hyprland_session,
     is_terminal_window_payload,
-    probe_send_enter_via_atspi,
-    probe_text_input_focus_via_atspi,
 )
 
 
 class SystemIntegrationDetectionTests(unittest.TestCase):
-    def test_detect_hyprland_by_desktop_name(self) -> None:
-        env = {"XDG_CURRENT_DESKTOP": "Hyprland"}
-        self.assertTrue(detect_hyprland_session(env=env))
-
-    def test_detect_hyprland_by_instance_signature(self) -> None:
-        env = {"HYPRLAND_INSTANCE_SIGNATURE": "abc"}
-        self.assertTrue(detect_hyprland_session(env=env))
-
-    def test_detect_hyprland_false_when_no_markers(self) -> None:
-        self.assertFalse(detect_hyprland_session(env={}))
-
-    def test_factory_returns_hyprland_integration(self) -> None:
-        integration = create_system_integration(env={"XDG_CURRENT_DESKTOP": "Hyprland"})
-        self.assertIsInstance(integration, HyprlandSystemIntegration)
-
-    def test_factory_returns_noop_integration(self) -> None:
-        integration = create_system_integration(env={}, platform_name="linux")
-        self.assertIsInstance(integration, NoopSystemIntegration)
-
-    def test_factory_returns_windows_integration(self) -> None:
-        integration = create_system_integration(env={}, platform_name="win32")
-        self.assertIsInstance(integration, WindowsSystemIntegration)
-
     def test_factory_returns_macos_integration(self) -> None:
-        integration = create_system_integration(env={}, platform_name="darwin")
+        integration = create_system_integration()
         self.assertIsInstance(integration, MacOSSystemIntegration)
 
 
-class HyprlandSystemIntegrationTests(unittest.TestCase):
-    def test_send_shortcut_uses_hyprctl_dispatch(self) -> None:
-        integration = HyprlandSystemIntegration()
-        with patch(
-            "vibemouse.system_integration.subprocess.run",
-            return_value=SimpleNamespace(returncode=0, stdout="ok\n"),
-        ) as run_mock:
-            ok = integration.send_shortcut(mod="CTRL SHIFT", key="V")
-
-        self.assertTrue(ok)
-        self.assertEqual(
-            run_mock.call_args.args[0],
-            ["hyprctl", "dispatch", "sendshortcut", "CTRL SHIFT, V, activewindow"],
-        )
-
-    def test_switch_workspace_left_uses_expected_argument(self) -> None:
-        integration = HyprlandSystemIntegration()
-        with patch(
-            "vibemouse.system_integration.subprocess.run",
-            return_value=SimpleNamespace(returncode=0, stdout="ok\n"),
-        ) as run_mock:
-            ok = integration.switch_workspace("left")
-
-        self.assertTrue(ok)
-        self.assertEqual(
-            run_mock.call_args.args[0],
-            ["hyprctl", "dispatch", "workspace", "e-1"],
-        )
-
-    def test_switch_workspace_handles_timeout(self) -> None:
-        integration = HyprlandSystemIntegration()
-        with patch(
-            "vibemouse.system_integration.subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd=["hyprctl"], timeout=1.0),
-        ):
-            self.assertFalse(integration.switch_workspace("right"))
-
-    def test_cursor_position_returns_tuple_from_json(self) -> None:
-        integration = HyprlandSystemIntegration()
-        with patch(
-            "vibemouse.system_integration.subprocess.run",
-            return_value=SimpleNamespace(returncode=0, stdout='{"x":120.5,"y":75}'),
-        ):
-            position = integration.cursor_position()
-
-        self.assertEqual(position, (120, 75))
-
-    def test_noop_focus_probe_returns_none(self) -> None:
-        integration = NoopSystemIntegration()
-        self.assertIsNone(integration.is_text_input_focused())
-
-    def test_noop_enter_accessibility_returns_none(self) -> None:
-        integration = NoopSystemIntegration()
-        self.assertIsNone(integration.send_enter_via_accessibility())
-
-    def test_hyprland_enter_accessibility_delegates_to_probe(self) -> None:
-        integration = HyprlandSystemIntegration()
-        with patch(
-            "vibemouse.system_integration.probe_send_enter_via_atspi",
-            return_value=True,
-        ) as probe_mock:
-            ok = integration.send_enter_via_accessibility()
-
-        self.assertTrue(ok)
-        self.assertEqual(probe_mock.call_count, 1)
-
-    def test_hyprland_terminal_active_detection_uses_active_window_payload(
+class MacOSSystemIntegrationTests(unittest.TestCase):
+    def _make_integration(
         self,
-    ) -> None:
-        integration = HyprlandSystemIntegration()
+        *,
+        quartz: object | None = None,
+        appkit: object | None = None,
+        ax: object | None = None,
+    ) -> MacOSSystemIntegration:
+        with (
+            patch("vibemouse.system_integration._load_quartz", return_value=quartz),
+            patch("vibemouse.system_integration._load_appkit", return_value=appkit),
+            patch("vibemouse.system_integration._load_application_services", return_value=ax),
+        ):
+            return MacOSSystemIntegration()
+
+    def test_send_shortcut_posts_keyboard_event(self) -> None:
+        posted: list[tuple[object, object]] = []
+
+        class FakeQuartz:
+            kCGHIDEventTap = 0
+
+            @staticmethod
+            def CGEventCreateKeyboardEvent(
+                source: object, keycode: int, key_down: bool
+            ) -> dict[str, object]:
+                return {"keycode": keycode, "down": key_down}
+
+            @staticmethod
+            def CGEventSetFlags(event: object, flags: int) -> None:
+                pass
+
+            @staticmethod
+            def CGEventPost(tap: object, event: object) -> None:
+                posted.append((tap, event))
+
+        integration = self._make_integration(quartz=FakeQuartz())
+        ok = integration.send_shortcut(mod="CMD", key="V")
+
+        self.assertTrue(ok)
+        self.assertEqual(len(posted), 2)
+        # Key down then key up
+        self.assertTrue(posted[0][1]["down"])
+        self.assertFalse(posted[1][1]["down"])
+
+    def test_send_shortcut_returns_false_when_quartz_unavailable(self) -> None:
+        integration = self._make_integration(quartz=None)
+        self.assertFalse(integration.send_shortcut(mod="CMD", key="V"))
+
+    def test_active_window_returns_bundle_info(self) -> None:
+        class FakeApp:
+            def bundleIdentifier(self) -> str:
+                return "com.apple.terminal"
+
+            def localizedName(self) -> str:
+                return "Terminal"
+
+        class FakeWorkspace:
+            def frontmostApplication(self) -> FakeApp:
+                return FakeApp()
+
+        class FakeNSWorkspace:
+            @staticmethod
+            def sharedWorkspace() -> FakeWorkspace:
+                return FakeWorkspace()
+
+        class FakeAppKit:
+            NSWorkspace = FakeNSWorkspace
+
+        integration = self._make_integration(appkit=FakeAppKit())
+        result = integration.active_window()
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["class"], "com.apple.terminal")
+        self.assertEqual(result["title"], "Terminal")
+
+    def test_is_terminal_active_detects_apple_terminal(self) -> None:
+        integration = self._make_integration()
         with patch.object(
             integration,
             "active_window",
-            return_value={"class": "foot", "initialClass": "foot", "title": "dev"},
+            return_value={"class": "com.apple.terminal", "title": "Terminal"},
         ):
             self.assertTrue(integration.is_terminal_window_active())
 
-    def test_hyprland_paste_shortcuts_terminal_and_default(self) -> None:
-        integration = HyprlandSystemIntegration()
-        self.assertEqual(
-            integration.paste_shortcuts(terminal_active=True),
-            (("CTRL SHIFT", "V"), ("SHIFT", "Insert"), ("CTRL", "V")),
-        )
-        self.assertEqual(
-            integration.paste_shortcuts(terminal_active=False),
-            (("CTRL", "V"),),
-        )
+    def test_is_terminal_active_false_for_safari(self) -> None:
+        integration = self._make_integration()
+        with patch.object(
+            integration,
+            "active_window",
+            return_value={"class": "com.apple.safari", "title": "Safari"},
+        ):
+            self.assertFalse(integration.is_terminal_window_active())
 
-    def test_windows_paste_shortcuts_terminal_and_default(self) -> None:
-        integration = WindowsSystemIntegration()
-        self.assertEqual(
-            integration.paste_shortcuts(terminal_active=True),
-            (("CTRL SHIFT", "V"), ("SHIFT", "Insert"), ("CTRL", "V")),
-        )
-        self.assertEqual(
-            integration.paste_shortcuts(terminal_active=False),
-            (("CTRL", "V"),),
-        )
+    def test_is_text_input_focused_returns_true_for_text_field(self) -> None:
+        class FakeQuartz:
+            @staticmethod
+            def AXUIElementCreateSystemWide() -> object:
+                return "system_wide"
+
+            @staticmethod
+            def AXUIElementCopyAttributeValue(
+                element: object, attr: str, _out: object
+            ) -> tuple[int, object]:
+                if attr == "AXFocusedUIElement":
+                    return (0, "focused_element")
+                if attr == "AXRole":
+                    return (0, "AXTextField")
+                return (1, None)
+
+        integration = self._make_integration(ax=FakeQuartz())
+        self.assertTrue(integration.is_text_input_focused())
+
+    def test_is_text_input_focused_returns_none_when_quartz_unavailable(self) -> None:
+        integration = self._make_integration(ax=None)
+        self.assertIsNone(integration.is_text_input_focused())
+
+    def test_cursor_position_returns_coordinates(self) -> None:
+        class FakePoint:
+            x = 100.5
+            y = 200.0
+
+        class FakeQuartz:
+            @staticmethod
+            def CGEventCreate(source: object) -> object:
+                return "event"
+
+            @staticmethod
+            def CGEventGetLocation(event: object) -> FakePoint:
+                return FakePoint()
+
+        integration = self._make_integration(quartz=FakeQuartz())
+        result = integration.cursor_position()
+        self.assertEqual(result, (100, 200))
+
+    def test_move_cursor_calls_warp(self) -> None:
+        warped: list[object] = []
+
+        class FakeCGPoint:
+            def __init__(self, x: int, y: int) -> None:
+                self.x = x
+                self.y = y
+
+        class FakeQuartz:
+            CGPoint = FakeCGPoint
+
+            @staticmethod
+            def CGWarpMouseCursorPosition(point: object) -> None:
+                warped.append(point)
+
+        integration = self._make_integration(quartz=FakeQuartz())
+        ok = integration.move_cursor(x=50, y=75)
+        self.assertTrue(ok)
+        self.assertEqual(len(warped), 1)
+
+    def test_send_enter_via_accessibility_posts_return_key(self) -> None:
+        posted: list[object] = []
+
+        class FakeQuartz:
+            kCGHIDEventTap = 0
+
+            @staticmethod
+            def CGEventCreateKeyboardEvent(
+                source: object, keycode: int, key_down: bool
+            ) -> dict[str, object]:
+                return {"keycode": keycode, "down": key_down}
+
+            @staticmethod
+            def CGEventPost(tap: object, event: object) -> None:
+                posted.append(event)
+
+        integration = self._make_integration(quartz=FakeQuartz())
+        ok = integration.send_enter_via_accessibility()
+        self.assertTrue(ok)
+        self.assertEqual(len(posted), 2)
+        self.assertEqual(posted[0]["keycode"], 36)
+
+    def test_switch_workspace_left(self) -> None:
+        posted: list[dict[str, object]] = []
+
+        class FakeQuartz:
+            kCGHIDEventTap = 0
+
+            @staticmethod
+            def CGEventCreateKeyboardEvent(
+                source: object, keycode: int, key_down: bool
+            ) -> dict[str, object]:
+                return {"keycode": keycode, "down": key_down}
+
+            @staticmethod
+            def CGEventSetFlags(event: object, flags: int) -> None:
+                pass
+
+            @staticmethod
+            def CGEventPost(tap: object, event: object) -> None:
+                posted.append(event)
+
+        integration = self._make_integration(quartz=FakeQuartz())
+        ok = integration.switch_workspace("left")
+        self.assertTrue(ok)
+        self.assertEqual(posted[0]["keycode"], 123)  # Left arrow
+
+    def test_type_text_posts_chunked_unicode_events(self) -> None:
+        posted: list[tuple[object, object]] = []
+        unicode_calls: list[tuple[object, int, str]] = []
+
+        class FakeQuartz:
+            kCGHIDEventTap = 0
+
+            @staticmethod
+            def CGEventCreateKeyboardEvent(
+                source: object, keycode: int, key_down: bool
+            ) -> dict[str, object]:
+                return {"keycode": keycode, "down": key_down}
+
+            @staticmethod
+            def CGEventKeyboardSetUnicodeString(
+                event: object, length: int, string: str
+            ) -> None:
+                unicode_calls.append((event, length, string))
+
+            @staticmethod
+            def CGEventPost(tap: object, event: object) -> None:
+                posted.append((tap, event))
+
+        integration = self._make_integration(quartz=FakeQuartz())
+        # 25 chars -> 2 chunks: 20 + 5
+        text = "A" * 20 + "B" * 5
+        ok = integration.type_text(text)
+
+        self.assertTrue(ok)
+        # 2 chunks x 2 events (down + up) = 4 posts
+        self.assertEqual(len(posted), 4)
+        # First chunk down, first chunk up, second chunk down, second chunk up
+        self.assertTrue(posted[0][1]["down"])
+        self.assertFalse(posted[1][1]["down"])
+        self.assertTrue(posted[2][1]["down"])
+        self.assertFalse(posted[3][1]["down"])
+        # Unicode strings set correctly
+        self.assertEqual(len(unicode_calls), 4)
+        self.assertEqual(unicode_calls[0][2], "A" * 20)
+        self.assertEqual(unicode_calls[0][1], 20)
+        self.assertEqual(unicode_calls[2][2], "B" * 5)
+        self.assertEqual(unicode_calls[2][1], 5)
+
+    def test_type_text_returns_none_when_quartz_unavailable(self) -> None:
+        integration = self._make_integration(quartz=None)
+        self.assertIsNone(integration.type_text("hello"))
+
+    def test_type_text_returns_false_on_exception(self) -> None:
+        class FakeQuartz:
+            kCGHIDEventTap = 0
+
+            @staticmethod
+            def CGEventCreateKeyboardEvent(
+                source: object, keycode: int, key_down: bool
+            ) -> object:
+                raise RuntimeError("CGEvent failed")
+
+            @staticmethod
+            def CGEventKeyboardSetUnicodeString(
+                event: object, length: int, string: str
+            ) -> None:
+                pass
+
+            @staticmethod
+            def CGEventPost(tap: object, event: object) -> None:
+                pass
+
+        integration = self._make_integration(quartz=FakeQuartz())
+        self.assertFalse(integration.type_text("hello"))
 
     def test_macos_paste_shortcuts_use_cmd_v(self) -> None:
         integration = MacOSSystemIntegration()
@@ -169,41 +311,6 @@ class HyprlandSystemIntegrationTests(unittest.TestCase):
         }
         self.assertFalse(is_terminal_window_payload(payload))
 
-    def test_probe_text_input_focus_returns_true_when_script_outputs_one(self) -> None:
-        with patch(
-            "vibemouse.system_integration.subprocess.run",
-            return_value=SimpleNamespace(returncode=0, stdout="1\n"),
-        ):
-            self.assertTrue(probe_text_input_focus_via_atspi())
-
-    def test_probe_text_input_focus_timeout_returns_false(self) -> None:
-        with patch(
-            "vibemouse.system_integration.subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd=["python3"], timeout=1.5),
-        ):
-            self.assertFalse(probe_text_input_focus_via_atspi())
-
-    def test_probe_send_enter_with_supplied_module_returns_true(self) -> None:
-        class _FakeKeySynthType:
-            PRESSRELEASE: object = object()
-
-        class _FakeAtspi:
-            KeySynthType: type[_FakeKeySynthType] = _FakeKeySynthType
-
-            @staticmethod
-            def generate_keyboard_event(
-                keyval: int,
-                keystring: str | None,
-                synth_type: object,
-            ) -> bool:
-                _ = keyval
-                _ = keystring
-                _ = synth_type
-                return True
-
-        self.assertTrue(
-            probe_send_enter_via_atspi(atspi_module=_FakeAtspi(), lazy_load=False)
-        )
-
-    def test_probe_send_enter_without_module_returns_false(self) -> None:
-        self.assertFalse(probe_send_enter_via_atspi(atspi_module=None, lazy_load=False))
+    def test_terminal_bundle_ids_contain_common_terminals(self) -> None:
+        self.assertIn("com.apple.terminal", _MACOS_TERMINAL_BUNDLE_IDS)
+        self.assertIn("com.googlecode.iterm2", _MACOS_TERMINAL_BUNDLE_IDS)
