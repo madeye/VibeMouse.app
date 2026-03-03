@@ -7,7 +7,7 @@ Mouse-side-button voice input for macOS VibeCoding.
 VibeMouse binds your coding speech workflow to mouse side buttons on macOS:
 - Front side button: start/stop recording
 - Rear side button while idle: send Enter
-- Rear side button while recording: stop recording and route transcript to OpenClaw
+- Rear side button while recording: stop recording and transcribe
 
 Core goals are low friction, stable daily use, and graceful fallback when any subsystem fails.
 
@@ -26,11 +26,11 @@ The runtime is event-driven and split by responsibility:
 5. `vibemouse/transcriber.py`
    - SenseVoice ASR transcription via ONNX Runtime
 6. `vibemouse/output.py`
-   - Text typing / clipboard / OpenClaw dispatch, with fallback and reason tracking
+   - Text typing / clipboard dispatch, with fallback and reason tracking
 7. `vibemouse/system_integration.py`
    - macOS platform integration via Quartz CGEvent APIs, AppKit NSWorkspace, and ApplicationServices accessibility
 8. `vibemouse/doctor.py`
-   - Built-in diagnostics for env, OpenClaw, accessibility permissions, and audio input
+   - Built-in diagnostics for env, accessibility permissions, and audio input
 
 ## Quick Start
 
@@ -107,7 +107,7 @@ Grant Accessibility permission to your terminal app instead.
 
 State matrix:
 - Idle + rear press -> Enter (`VIBEMOUSE_ENTER_MODE`)
-- Recording + rear press -> stop recording + OpenClaw dispatch
+- Recording + rear press -> stop recording + transcribe
 
 If your hardware labels are reversed:
 
@@ -115,22 +115,6 @@ If your hardware labels are reversed:
 export VIBEMOUSE_FRONT_BUTTON=x2
 export VIBEMOUSE_REAR_BUTTON=x1
 ```
-
-## OpenClaw Integration
-
-OpenClaw route is explicit and configurable:
-- `VIBEMOUSE_OPENCLAW_COMMAND` (default `openclaw`)
-- `VIBEMOUSE_OPENCLAW_AGENT` (default `main`)
-- `VIBEMOUSE_OPENCLAW_TIMEOUT_S` (default `20.0`)
-- `VIBEMOUSE_OPENCLAW_RETRIES` (default `0`)
-
-Dispatch behavior:
-- Fast fire-and-forget spawn to avoid blocking UI interaction
-- Route result includes reason (`dispatched`, `dispatched_after_retry_*`, `spawn_error:*`, etc.)
-- Clipboard fallback if command is invalid or spawn fails
-
-Deployment tip: if you run your own local assistant setup, set
-`VIBEMOUSE_OPENCLAW_AGENT` to your own assistant ID.
 
 ## Built-in Doctor
 
@@ -148,7 +132,6 @@ vibemouse doctor --fix
 
 Current checks include:
 - Config load validity
-- OpenClaw command resolution + agent existence
 - Microphone input availability
 - macOS Accessibility permission status
 - pyobjc framework availability
@@ -175,13 +158,6 @@ Full configuration source of truth: `vibemouse/config.py`.
 ### Side buttons not detected
 
 Grant Accessibility permission to your terminal app in System Settings > Privacy & Security > Accessibility, then restart the terminal.
-
-### OpenClaw route not working
-
-```bash
-openclaw agent --agent main --message "ping" --json
-vibemouse doctor
-```
 
 ### No audio input
 

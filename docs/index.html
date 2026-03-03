@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VibeMouse — Mouse-side-button voice dictation for macOS</title>
-  <meta name="description" content="VibeMouse binds speech-to-text to your mouse side buttons on macOS. ONNX-first SenseVoice ASR, gesture recognition, OpenClaw integration.">
+  <meta name="description" content="VibeMouse binds speech-to-text to your mouse side buttons on macOS. ONNX-first SenseVoice ASR, gesture recognition, smart output routing.">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -288,7 +288,7 @@
         <div class="how-card">
           <span class="icon" aria-hidden="true">&#9889;</span>
           <h3>Rear Button &middot; Recording</h3>
-          <p>Stops recording and dispatches the transcript to OpenClaw for AI&#8209;assisted processing.</p>
+          <p>Stops recording and transcribes your speech. The text is typed into the focused app or copied to clipboard.</p>
         </div>
       </div>
     </div>
@@ -312,12 +312,8 @@
           <p>Types text directly into the focused app. Falls back to clipboard or paste automatically with reason tracking.</p>
         </div>
         <div class="feat-card">
-          <h3>OpenClaw Integration</h3>
-          <p>Route transcripts to your local AI assistant with configurable agent, timeout, and retry settings.</p>
-        </div>
-        <div class="feat-card">
           <h3>Built-in Doctor</h3>
-          <p>Run <code>vibemouse doctor</code> to diagnose permissions, audio input, OpenClaw connectivity, and config issues.</p>
+          <p>Run <code>vibemouse doctor</code> to diagnose permissions, audio input, and config issues.</p>
         </div>
         <div class="feat-card">
           <h3>Zero External Services</h3>
@@ -379,9 +375,8 @@ vibemouse doctor --fix    # auto-fix then re-check</code></pre>
             <tr><td><code>VIBEMOUSE_GESTURES_ENABLED</code></td><td><code>false</code></td><td>Enable gesture recognition</td></tr>
             <tr><td><code>VIBEMOUSE_AUTO_PASTE</code></td><td><code>false</code></td><td>Auto-paste when output falls back to clipboard</td></tr>
             <tr><td><code>VIBEMOUSE_PREWARM_ON_START</code></td><td><code>true</code></td><td>Preload ASR model on startup</td></tr>
-            <tr><td><code>VIBEMOUSE_OPENCLAW_AGENT</code></td><td><code>main</code></td><td>OpenClaw agent ID for transcript dispatch</td></tr>
             <tr><td><code>VIBEMOUSE_FRONT_BUTTON</code></td><td><code>x1</code></td><td>Mouse button for record toggle</td></tr>
-            <tr><td><code>VIBEMOUSE_REAR_BUTTON</code></td><td><code>x2</code></td><td>Mouse button for enter / OpenClaw</td></tr>
+            <tr><td><code>VIBEMOUSE_REAR_BUTTON</code></td><td><code>x2</code></td><td>Mouse button for enter / transcribe</td></tr>
           </tbody>
         </table>
       </div>
