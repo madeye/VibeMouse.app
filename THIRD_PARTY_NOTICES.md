@@ -19,6 +19,8 @@ The following are direct runtime dependencies declared in `pyproject.toml`.
 | `sounddevice` | MIT | https://python-sounddevice.readthedocs.io/ |
 | `soundfile` | BSD-3-Clause | https://github.com/bastibe/python-soundfile |
 | `pynput` | LGPL-3.0 (or later) | https://github.com/moses-palmer/pynput |
+| `evdev` | BSD-3-Clause | https://github.com/gvalkov/python-evdev |
+| `PyGObject` | LGPL-2.1 (or later) | https://pygobject.gnome.org |
 | `pyperclip` | BSD | https://github.com/asweigart/pyperclip |
 | `funasr` | MIT | https://github.com/modelscope/FunASR |
 | `funasr-onnx` | MIT | https://pypi.org/project/funasr-onnx/ |
@@ -28,10 +30,10 @@ The following are direct runtime dependencies declared in `pyproject.toml`.
 
 Notes:
 
-- `pynput` is LGPL-licensed. If you redistribute packaged binaries, ensure
-  LGPL obligations are satisfied (license notice, relinking conditions where
-  applicable, and source availability requirements for the LGPL-covered
-  component).
+- `pynput` and `PyGObject` are LGPL-licensed. If you redistribute packaged
+  binaries, ensure LGPL obligations are satisfied (license notice, relinking
+  conditions where applicable, and source availability requirements for the
+  LGPL-covered components).
 - Transitive dependencies are not exhaustively listed here. They remain subject
   to their own licenses.
 
