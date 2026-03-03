@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-VibeMouse is a macOS mouse side-button voice input daemon. It binds speech-to-text to mouse side buttons: front button toggles recording, rear button sends Enter when idle or dispatches transcript to OpenClaw when recording. ASR uses SenseVoice (ONNX-first, optional PyTorch backend). Platform integration uses Quartz/AppKit via pyobjc.
+VibeMouse is a macOS mouse side-button voice input daemon. It binds speech-to-text to mouse side buttons: front button toggles recording, rear button sends Enter when idle or stops recording and transcribes when recording. ASR uses SenseVoice (ONNX-first, optional PyTorch backend). Platform integration uses Quartz/AppKit via pyobjc.
 
 ## Build & Install
 
@@ -41,7 +41,7 @@ Tests use `unittest` with `unittest.mock`. No external test fixtures or CI-speci
 - **Mouse input**: `SideButtonListener` (NSEvent global monitor via Quartz/AppKit) fires `_on_front_press` / `_on_rear_press` / `_on_gesture` callbacks
 - **Audio**: `AudioRecorder` captures mic to temp WAV via sounddevice
 - **Transcription**: `SenseVoiceTranscriber` with lazy-loaded backend (`_FunASRONNXBackend` or `_FunASRBackend`), runs in daemon threads under `_transcribe_lock`
-- **Output routing**: `TextOutput.inject_or_clipboard()` for default route, `TextOutput.send_to_openclaw_result()` for OpenClaw route. Falls back clipboard → typed → pasted with reason tracking
+- **Output routing**: `TextOutput.inject_or_clipboard()` routes text to the focused app, clipboard, or paste. Falls back clipboard → typed → pasted with reason tracking
 
 ### Platform integration
 

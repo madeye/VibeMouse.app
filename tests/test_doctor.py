@@ -13,53 +13,11 @@ from vibemouse.doctor import (
     _check_macos_accessibility_permission,
     _check_macos_launchagent_state,
     _check_macos_pyobjc,
-    _check_openclaw,
-    _parse_openclaw_command,
     run_doctor,
 )
 
 
 class DoctorHelpersTests(unittest.TestCase):
-    def test_parse_openclaw_command_invalid_shell_syntax(self) -> None:
-        self.assertIsNone(_parse_openclaw_command('openclaw "'))
-
-    def test_check_openclaw_reports_missing_executable(self) -> None:
-        config = cast(
-            AppConfig,
-            cast(
-                object,
-                SimpleNamespace(openclaw_command="openclaw", openclaw_agent="main"),
-            ),
-        )
-        with patch("vibemouse.doctor.shutil.which", return_value=None):
-            checks = _check_openclaw(config)
-
-        self.assertEqual(checks[0].status, "fail")
-        self.assertIn("executable not found", checks[0].detail)
-
-    def test_check_openclaw_reports_agent_exists(self) -> None:
-        config = cast(
-            AppConfig,
-            cast(
-                object,
-                SimpleNamespace(openclaw_command="openclaw", openclaw_agent="main"),
-            ),
-        )
-        with (
-            patch("vibemouse.doctor.shutil.which", return_value="/usr/bin/openclaw"),
-            patch(
-                "vibemouse.doctor.subprocess.run",
-                return_value=SimpleNamespace(
-                    returncode=0,
-                    stdout='[{"id": "main"}]',
-                    stderr="",
-                ),
-            ),
-        ):
-            checks = _check_openclaw(config)
-
-        self.assertEqual([check.status for check in checks], ["ok", "ok"])
-
     def test_audio_input_check_reports_missing_dependency(self) -> None:
         with patch(
             "vibemouse.doctor.importlib.import_module",
@@ -159,8 +117,6 @@ class DoctorCommandTests(unittest.TestCase):
                         cast(
                             object,
                             SimpleNamespace(
-                                openclaw_command="openclaw",
-                                openclaw_agent="main",
                                 rear_button="x2",
                                 sample_rate=16000,
                                 channels=1,
@@ -169,7 +125,6 @@ class DoctorCommandTests(unittest.TestCase):
                     ),
                 ),
             ),
-            patch("vibemouse.doctor._check_openclaw", return_value=[]),
             patch(
                 "vibemouse.doctor._check_audio_input",
                 return_value=DoctorCheck("audio", "ok", "ok"),
