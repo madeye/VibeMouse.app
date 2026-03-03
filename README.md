@@ -24,7 +24,7 @@ The runtime is event-driven and split by responsibility:
 4. `vibemouse/audio.py`
    - Records audio to temp WAV via sounddevice
 5. `vibemouse/transcriber.py`
-   - SenseVoice ASR transcription via ONNX Runtime (CoreML/ANE on Apple Silicon, CPU fallback)
+   - SenseVoice ASR transcription via ONNX Runtime
 6. `vibemouse/output.py`
    - Text typing / clipboard / OpenClaw dispatch, with fallback and reason tracking
 7. `vibemouse/system_integration.py`
@@ -49,7 +49,7 @@ pip install -U pip
 pip install -e .
 ```
 
-Speech recognition uses ONNX Runtime with Apple Neural Engine acceleration on Apple Silicon (falls back to CPU).
+Speech recognition uses ONNX Runtime (CPU).
 
 ### Run
 

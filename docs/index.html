@@ -300,7 +300,7 @@
       <div class="feat-grid">
         <div class="feat-card">
           <h3>SenseVoice ONNX ASR</h3>
-          <p>Fast, accurate speech recognition running locally via ONNX Runtime. Hardware-accelerated on Apple Silicon via CoreML and the Apple Neural Engine.</p>
+          <p>Fast, accurate speech recognition running locally on CPU via ONNX Runtime. No GPU required.</p>
         </div>
         <div class="feat-card">
           <h3>Gesture Recognition</h3>
@@ -341,7 +341,7 @@
           <pre><code>python3 -m venv .venv &amp;&amp; source .venv/bin/activate
 pip install -U pip
 pip install -e .</code></pre>
-          <p class="note">Speech recognition uses ONNX Runtime with Apple Neural Engine acceleration on Apple Silicon.</p>
+          <p class="note">Speech recognition uses ONNX Runtime (CPU). No additional backends needed.</p>
         </div>
         <div class="step">
           <div class="step-label">Run</div>

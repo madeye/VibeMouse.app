@@ -252,13 +252,8 @@ class _FunASRONNXBackend:
             self._ensure_tokenizer_file(model_dir)
 
             try:
-                model = SenseVoiceONNX(model_dir)
-                self._model = model
-                provider = model.provider_in_use
-                if provider == "CoreMLExecutionProvider":
-                    self.device_in_use = "coreml"
-                else:
-                    self.device_in_use = "cpu"
+                self._model = SenseVoiceONNX(model_dir)
+                self.device_in_use = "cpu"
             except Exception as error:
                 raise RuntimeError(
                     f"Failed to load SenseVoice ONNX model from {model_dir}: {error}"
