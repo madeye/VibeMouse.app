@@ -1,0 +1,56 @@
+name: macOS Build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest tests/
+
+      - name: Download model
+        run: python scripts/download_model.py
+
+      - name: Build macOS app bundle
+        run: |
+          pyinstaller --noconfirm --windowed \
+            --name VibeMouse \
+            --icon vibemouse/macos/resources/VibeMouse.icns \
+            --add-data "vibemouse/models:vibemouse/models" \
+            --add-data "vibemouse/macos/resources:vibemouse/macos/resources" \
+            --osx-bundle-identifier com.vibemouse.app \
+            vibemouse/macos_entry.py
+
+      - name: Verify app bundle exists
+        run: test -d dist/VibeMouse.app
+
+      - name: Upload app bundle
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: VibeMouse.app
+          path: dist/VibeMouse.app
+          retention-days: 7
