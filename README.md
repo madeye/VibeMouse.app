@@ -42,10 +42,17 @@ The runtime is event-driven and split by responsibility:
 
 ### Build VibeMouse.app
 
+One-step build (creates venv, installs deps, downloads model, runs PyInstaller):
+
 ```bash
 git clone https://github.com/anthropics/VibeMouse.app.git
 cd VibeMouse.app
+./scripts/build_app.sh
+```
 
+Or step by step:
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
@@ -54,17 +61,11 @@ pip install -e ".[dev,download]"
 # Download the SenseVoice ONNX model for offline use
 python scripts/download_model.py
 
-# Build the .app bundle with PyInstaller
-pyinstaller --noconfirm --windowed \
-  --name VibeMouse \
-  --icon vibemouse/macos/resources/VibeMouse.icns \
-  --add-data "vibemouse/models:vibemouse/models" \
-  --add-data "vibemouse/macos/resources:vibemouse/macos/resources" \
-  --osx-bundle-identifier com.vibemouse.app \
-  vibemouse/macos_entry.py
+# Build the .app bundle (uses VibeMouse.spec)
+pyinstaller --noconfirm VibeMouse.spec
 ```
 
-The built app is at `dist/VibeMouse.app`.
+The built app is at `dist/VibeMouse.app`. The bundle includes a complete Python runtime — users do not need Python installed.
 
 ### Install
 
