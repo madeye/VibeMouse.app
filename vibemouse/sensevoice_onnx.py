@@ -20,6 +20,16 @@ import soundfile as sf
 from kaldi_native_fbank import FbankOptions, FrameExtractionOptions, MelBanksOptions, OnlineFbank
 
 
+def _select_providers() -> list[str]:
+    """Return ONNX Runtime execution providers, preferring CoreML (ANE) on macOS."""
+    available = set(ort.get_available_providers())
+    providers: list[str] = []
+    if "CoreMLExecutionProvider" in available:
+        providers.append("CoreMLExecutionProvider")
+    providers.append("CPUExecutionProvider")
+    return providers
+
+
 _LANG_IDS: dict[str, int] = {
     "auto": 0,
     "zh": 3,
@@ -55,7 +65,13 @@ class SenseVoiceONNX:
         opts = ort.SessionOptions()
         opts.inter_op_num_threads = 1
         opts.intra_op_num_threads = 4
-        self._session = ort.InferenceSession(str(onnx_path), sess_options=opts)
+
+        providers = _select_providers()
+        self._session = ort.InferenceSession(
+            str(onnx_path), sess_options=opts, providers=providers
+        )
+        active = self._session.get_providers()
+        self.provider_in_use: str = active[0] if active else "CPUExecutionProvider"
 
         # Token vocabulary
         tokens_path = model_dir / "tokens.json"

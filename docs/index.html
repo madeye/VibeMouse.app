@@ -300,7 +300,7 @@
       <div class="feat-grid">
         <div class="feat-card">
           <h3>SenseVoice ONNX ASR</h3>
-          <p>Fast, accurate speech recognition running locally on CPU via ONNX Runtime. Optional PyTorch and Intel NPU backends.</p>
+          <p>Fast, accurate speech recognition running locally via ONNX Runtime. Hardware-accelerated on Apple Silicon via CoreML and the Apple Neural Engine.</p>
         </div>
         <div class="feat-card">
           <h3>Gesture Recognition</h3>
@@ -341,7 +341,7 @@
           <pre><code>python3 -m venv .venv &amp;&amp; source .venv/bin/activate
 pip install -U pip
 pip install -e .</code></pre>
-          <p class="note">Optional: <code>pip install -e ".[pt]"</code> for PyTorch/FunASR, <code>pip install -e ".[npu]"</code> for Intel NPU.</p>
+          <p class="note">Speech recognition uses ONNX Runtime with Apple Neural Engine acceleration on Apple Silicon.</p>
         </div>
         <div class="step">
           <div class="step-label">Run</div>
@@ -368,7 +368,6 @@ vibemouse doctor --fix    # auto-fix then re-check</code></pre>
           </thead>
           <tbody>
             <tr><td><code>VIBEMOUSE_ENTER_MODE</code></td><td><code>enter</code></td><td>Rear-button submit: <code>enter</code>, <code>ctrl_enter</code>, <code>shift_enter</code>, <code>none</code></td></tr>
-            <tr><td><code>VIBEMOUSE_BACKEND</code></td><td><code>funasr_onnx</code></td><td>ASR backend: <code>funasr_onnx</code>, <code>funasr</code>, <code>auto</code></td></tr>
             <tr><td><code>VIBEMOUSE_GESTURES_ENABLED</code></td><td><code>false</code></td><td>Enable gesture recognition</td></tr>
             <tr><td><code>VIBEMOUSE_AUTO_PASTE</code></td><td><code>false</code></td><td>Auto-paste when output falls back to clipboard</td></tr>
             <tr><td><code>VIBEMOUSE_PREWARM_ON_START</code></td><td><code>true</code></td><td>Preload ASR model on startup</td></tr>
