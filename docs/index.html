@@ -332,21 +332,28 @@
     <div class="container">
       <h2>Quick Start</h2>
       <ul class="req-list">
-        <li>macOS 13+ (Ventura or later)</li>
+        <li>macOS 13+ (Ventura or later) on Apple Silicon</li>
         <li>Python 3.10+</li>
-        <li>Accessibility permission for your terminal app</li>
+        <li>Accessibility permission for your terminal app or VibeMouse.app</li>
       </ul>
       <div class="quickstart">
         <div class="step">
-          <div class="step-label">Install</div>
-          <pre><code>python3 -m venv .venv &amp;&amp; source .venv/bin/activate
-pip install -U pip
-pip install -e .</code></pre>
-          <p class="note">Speech recognition uses ONNX Runtime (CPU). No additional backends needed.</p>
+          <div class="step-label">Option A &mdash; Download</div>
+          <p class="note">Grab <a href="https://github.com/madeye/VibeMouse.app/releases/latest">VibeMouse.app.zip</a> from the latest release, unzip, and move to <code>/Applications</code>.</p>
         </div>
         <div class="step">
-          <div class="step-label">Run</div>
-          <pre><code>vibemouse</code></pre>
+          <div class="step-label">Option B &mdash; Build from Source</div>
+          <pre><code>git clone https://github.com/madeye/VibeMouse.app.git
+cd VibeMouse.app
+bash build/build_macos_app.sh
+open dist/VibeMouse.app</code></pre>
+          <p class="note">The build script creates a virtualenv, downloads the SenseVoice ONNX model, and packages everything into a signed <code>.app</code> bundle via PyInstaller.</p>
+        </div>
+        <div class="step">
+          <div class="step-label">Option C &mdash; pip install</div>
+          <pre><code>python3 -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -e .
+vibemouse</code></pre>
         </div>
         <div class="step">
           <div class="step-label">Diagnose</div>
