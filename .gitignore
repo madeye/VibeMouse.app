@@ -5,3 +5,6 @@ iic/
 vibemouse.egg-info/
 __pycache__/
 *.pyc
+build/
+dist/
+.DS_Store
