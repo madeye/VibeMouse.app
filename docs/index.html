@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VibeMouse — Mouse-side-button voice dictation for macOS</title>
+  <meta name="description" content="VibeMouse binds speech-to-text to your mouse side buttons on macOS. ONNX-first SenseVoice ASR, gesture recognition, OpenClaw integration.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --accent: #58a6ff;
+      --accent-dim: #1f6feb;
+      --text: #c9d1d9;
+      --heading: #f0f6fc;
+      --code-bg: #1f2937;
+      --code-text: #e5e7eb;
+      --border: #30363d;
+      --radius: 8px;
+      --max-w: 960px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji";
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+
+    /* ── Hero ─────────────────────────────────────────── */
+    .hero {
+      text-align: center;
+      padding: 96px 24px 72px;
+    }
+    .hero h1 {
+      font-size: 3rem;
+      font-weight: 800;
+      color: var(--heading);
+      letter-spacing: -0.02em;
+    }
+    .hero .tagline {
+      font-size: 1.25rem;
+      color: var(--text);
+      margin-top: 16px;
+      max-width: 560px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .hero .badges {
+      margin-top: 24px;
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--text);
+      background: var(--surface);
+    }
+    .hero .cta {
+      margin-top: 32px;
+      display: inline-flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn {
+      display: inline-block;
+      padding: 10px 24px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border-radius: var(--radius);
+      transition: background 0.15s;
+    }
+    .btn-primary {
+      background: var(--accent-dim);
+      color: var(--heading);
+    }
+    .btn-primary:hover { background: var(--accent); text-decoration: none; }
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { border-color: var(--accent); text-decoration: none; }
+
+    /* ── Sections ─────────────────────────────────────── */
+    section { padding: 64px 0; }
+    section + section { border-top: 1px solid var(--border); }
+
+    h2 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--heading);
+      margin-bottom: 32px;
+      text-align: center;
+    }
+    h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--heading);
+      margin-bottom: 8px;
+    }
+
+    /* ── How it works ─────────────────────────────────── */
+    .how-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 24px;
+    }
+    .how-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      text-align: center;
+    }
+    .how-card .icon {
+      font-size: 2rem;
+      margin-bottom: 12px;
+      display: block;
+    }
+    .how-card p { font-size: 0.9rem; color: var(--text); margin-top: 8px; }
+
+    /* ── Features ─────────────────────────────────────── */
+    .feat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+    }
+    .feat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .feat-card p { font-size: 0.9rem; margin-top: 4px; }
+
+    /* ── Code blocks ──────────────────────────────────── */
+    pre {
+      background: var(--code-bg);
+      color: var(--code-text);
+      padding: 16px 20px;
+      border-radius: var(--radius);
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.6;
+    }
+    code {
+      font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+    }
+    p code, td code {
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.85em;
+      color: var(--code-text);
+    }
+
+    /* ── Quick start ──────────────────────────────────── */
+    .quickstart { max-width: 640px; margin: 0 auto; }
+    .quickstart .step {
+      margin-bottom: 20px;
+    }
+    .quickstart .step-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+    .quickstart .note {
+      font-size: 0.85rem;
+      color: var(--text);
+      margin-top: 8px;
+      opacity: 0.8;
+    }
+
+    /* ── Config table ─────────────────────────────────── */
+    .config-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      color: var(--heading);
+      font-weight: 600;
+      background: var(--surface);
+    }
+    td { color: var(--text); }
+
+    /* ── Requirements ─────────────────────────────────── */
+    .req-list {
+      list-style: none;
+      max-width: 540px;
+      margin: 0 auto 24px;
+    }
+    .req-list li {
+      padding: 6px 0;
+      font-size: 0.95rem;
+    }
+    .req-list li::before {
+      content: "\2713";
+      color: var(--accent);
+      font-weight: 700;
+      margin-right: 10px;
+    }
+
+    /* ── Footer ───────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 0;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text);
+      opacity: 0.7;
+    }
+    footer a { color: var(--accent); }
+
+    /* ── Responsive ───────────────────────────────────── */
+    @media (max-width: 600px) {
+      .hero { padding: 64px 16px 48px; }
+      .hero h1 { font-size: 2.2rem; }
+      section { padding: 48px 0; }
+      h2 { font-size: 1.4rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Hero -->
+  <header class="hero">
+    <div class="container">
+      <h1>VibeMouse</h1>
+      <p class="tagline">Mouse-side-button voice dictation for macOS. Bind speech&#8209;to&#8209;text to your mouse&nbsp;side&nbsp;buttons&mdash;talk, click, code.</p>
+      <div class="badges">
+        <span class="badge">macOS 13+</span>
+        <span class="badge">Python 3.10+</span>
+        <span class="badge">SenseVoice ONNX</span>
+        <span class="badge">Apache-2.0</span>
+      </div>
+      <div class="cta">
+        <a href="#quickstart" class="btn btn-primary">Get Started</a>
+        <a href="https://github.com/madeye/VibeMouse.app" class="btn btn-secondary">View on GitHub</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- How it works -->
+  <section>
+    <div class="container">
+      <h2>How It Works</h2>
+      <div class="how-grid">
+        <div class="how-card">
+          <span class="icon" aria-hidden="true">&#128396;</span>
+          <h3>Front Button</h3>
+          <p>Toggle voice recording on and off. Press once to start, press again to stop and transcribe.</p>
+        </div>
+        <div class="how-card">
+          <span class="icon" aria-hidden="true">&#9166;</span>
+          <h3>Rear Button &middot; Idle</h3>
+          <p>Sends Enter (or Ctrl+Enter / Shift+Enter). Submit prompts, confirm dialogs&mdash;no keyboard needed.</p>
+        </div>
+        <div class="how-card">
+          <span class="icon" aria-hidden="true">&#9889;</span>
+          <h3>Rear Button &middot; Recording</h3>
+          <p>Stops recording and dispatches the transcript to OpenClaw for AI&#8209;assisted processing.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section>
+    <div class="container">
+      <h2>Features</h2>
+      <div class="feat-grid">
+        <div class="feat-card">
+          <h3>SenseVoice ONNX ASR</h3>
+          <p>Fast, accurate speech recognition running locally on CPU via ONNX Runtime. Optional PyTorch and Intel NPU backends.</p>
+        </div>
+        <div class="feat-card">
+          <h3>Gesture Recognition</h3>
+          <p>Swipe while holding a side button to trigger custom actions&mdash;workspace switching, record toggles, and more.</p>
+        </div>
+        <div class="feat-card">
+          <h3>Smart Output Routing</h3>
+          <p>Types text directly into the focused app. Falls back to clipboard or paste automatically with reason tracking.</p>
+        </div>
+        <div class="feat-card">
+          <h3>OpenClaw Integration</h3>
+          <p>Route transcripts to your local AI assistant with configurable agent, timeout, and retry settings.</p>
+        </div>
+        <div class="feat-card">
+          <h3>Built-in Doctor</h3>
+          <p>Run <code>vibemouse doctor</code> to diagnose permissions, audio input, OpenClaw connectivity, and config issues.</p>
+        </div>
+        <div class="feat-card">
+          <h3>Zero External Services</h3>
+          <p>All speech recognition runs on-device. No API keys, no cloud dependencies, no data leaves your Mac.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Start -->
+  <section id="quickstart">
+    <div class="container">
+      <h2>Quick Start</h2>
+      <ul class="req-list">
+        <li>macOS 13+ (Ventura or later)</li>
+        <li>Python 3.10+</li>
+        <li>Accessibility permission for your terminal app</li>
+      </ul>
+      <div class="quickstart">
+        <div class="step">
+          <div class="step-label">Install</div>
+          <pre><code>python3 -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -U pip
+pip install -e .</code></pre>
+          <p class="note">Optional: <code>pip install -e ".[pt]"</code> for PyTorch/FunASR, <code>pip install -e ".[npu]"</code> for Intel NPU.</p>
+        </div>
+        <div class="step">
+          <div class="step-label">Run</div>
+          <pre><code>vibemouse</code></pre>
+        </div>
+        <div class="step">
+          <div class="step-label">Diagnose</div>
+          <pre><code>vibemouse doctor          # check everything
+vibemouse doctor --fix    # auto-fix then re-check</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Configuration -->
+  <section>
+    <div class="container">
+      <h2>Configuration</h2>
+      <p style="text-align:center; margin-bottom:24px;">All settings are environment variables. No config files needed.</p>
+      <div class="config-wrap">
+        <table>
+          <thead>
+            <tr><th>Variable</th><th>Default</th><th>Purpose</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>VIBEMOUSE_ENTER_MODE</code></td><td><code>enter</code></td><td>Rear-button submit: <code>enter</code>, <code>ctrl_enter</code>, <code>shift_enter</code>, <code>none</code></td></tr>
+            <tr><td><code>VIBEMOUSE_BACKEND</code></td><td><code>funasr_onnx</code></td><td>ASR backend: <code>funasr_onnx</code>, <code>funasr</code>, <code>auto</code></td></tr>
+            <tr><td><code>VIBEMOUSE_GESTURES_ENABLED</code></td><td><code>false</code></td><td>Enable gesture recognition</td></tr>
+            <tr><td><code>VIBEMOUSE_AUTO_PASTE</code></td><td><code>false</code></td><td>Auto-paste when output falls back to clipboard</td></tr>
+            <tr><td><code>VIBEMOUSE_PREWARM_ON_START</code></td><td><code>true</code></td><td>Preload ASR model on startup</td></tr>
+            <tr><td><code>VIBEMOUSE_OPENCLAW_AGENT</code></td><td><code>main</code></td><td>OpenClaw agent ID for transcript dispatch</td></tr>
+            <tr><td><code>VIBEMOUSE_FRONT_BUTTON</code></td><td><code>x1</code></td><td>Mouse button for record toggle</td></tr>
+            <tr><td><code>VIBEMOUSE_REAR_BUTTON</code></td><td><code>x2</code></td><td>Mouse button for enter / OpenClaw</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="text-align:center; margin-top:16px; font-size:0.85rem; opacity:0.7;">Full reference: <a href="https://github.com/madeye/VibeMouse.app/blob/master/vibemouse/config.py"><code>vibemouse/config.py</code></a></p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p><a href="https://github.com/madeye/VibeMouse.app">GitHub</a> &middot; Apache-2.0 License &middot; Built for macOS</p>
+    </div>
+  </footer>
+
+</body>
+</html>
