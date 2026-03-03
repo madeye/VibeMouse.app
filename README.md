@@ -38,24 +38,67 @@ The runtime is event-driven and split by responsibility:
 
 - macOS 13+ (Ventura or later)
 - Python 3.10+
-- Grant Accessibility permission to your terminal in System Settings > Privacy & Security > Accessibility
+- Xcode Command Line Tools (`xcode-select --install`)
+
+### Build VibeMouse.app
+
+```bash
+git clone https://github.com/anthropics/VibeMouse.app.git
+cd VibeMouse.app
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install -e ".[dev,download]"
+
+# Download the SenseVoice ONNX model for offline use
+python scripts/download_model.py
+
+# Build the .app bundle with PyInstaller
+pyinstaller --noconfirm --windowed \
+  --name VibeMouse \
+  --icon vibemouse/macos/resources/VibeMouse.icns \
+  --add-data "vibemouse/models:vibemouse/models" \
+  --add-data "vibemouse/macos/resources:vibemouse/macos/resources" \
+  --osx-bundle-identifier com.vibemouse.app \
+  vibemouse/macos_entry.py
+```
+
+The built app is at `dist/VibeMouse.app`.
 
 ### Install
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -U pip
-pip install -e .
+cp -R dist/VibeMouse.app /Applications/
 ```
-
-Speech recognition uses ONNX Runtime (CPU).
 
 ### Run
 
+Double-click **VibeMouse** in `/Applications`, or:
+
 ```bash
+open /Applications/VibeMouse.app
+```
+
+VibeMouse runs as a menu-bar accessory (no Dock icon). Use the menu-bar icon to select input devices, toggle Start at Login, or quit.
+
+### Permissions
+
+On first launch, grant these in **System Settings > Privacy & Security**:
+
+- **Accessibility** — required for mouse side-button capture and keyboard synthesis
+- **Microphone** — required for audio recording
+
+### Development mode
+
+To run from source without building the .app:
+
+```bash
+pip install -e .
 vibemouse
 ```
+
+Grant Accessibility permission to your terminal app instead.
 
 ## Default Mapping and State Logic
 

@@ -40,28 +40,67 @@ VibeMouse 把高频语音工作流绑定到 macOS 鼠标侧键：
 
 - macOS 13+（Ventura 或更高）
 - Python 3.10+
-- 在系统设置 > 隐私与安全 > 辅助功能中为终端授权
+- Xcode 命令行工具（`xcode-select --install`）
+
+### 构建 VibeMouse.app
+
+```bash
+git clone https://github.com/anthropics/VibeMouse.app.git
+cd VibeMouse.app
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install -e ".[dev,download]"
+
+# 下载 SenseVoice ONNX 模型（离线使用）
+python scripts/download_model.py
+
+# 使用 PyInstaller 构建 .app
+pyinstaller --noconfirm --windowed \
+  --name VibeMouse \
+  --icon vibemouse/macos/resources/VibeMouse.icns \
+  --add-data "vibemouse/models:vibemouse/models" \
+  --add-data "vibemouse/macos/resources:vibemouse/macos/resources" \
+  --osx-bundle-identifier com.vibemouse.app \
+  vibemouse/macos_entry.py
+```
+
+构建产物位于 `dist/VibeMouse.app`。
 
 ### 安装
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -U pip
-pip install -e .
+cp -R dist/VibeMouse.app /Applications/
 ```
-
-默认安装走 ONNX 优先，部署体积更小。
-
-可选后端：
-- PyTorch/FunASR（支持 GPU）：`pip install -e ".[pt]"`
-- Intel NPU/OpenVINO：`pip install -e ".[npu]"`
 
 ### 运行
 
+在 `/Applications` 中双击 **VibeMouse**，或通过命令行：
+
 ```bash
+open /Applications/VibeMouse.app
+```
+
+VibeMouse 以菜单栏附件形式运行（不会出现在 Dock 中）。通过菜单栏图标选择输入设备、切换开机启动或退出。
+
+### 权限
+
+首次启动时，在 **系统设置 > 隐私与安全** 中授权：
+
+- **辅助功能** — 捕获鼠标侧键与键盘合成所需
+- **麦克风** — 录音所需
+
+### 开发模式
+
+无需构建 .app，直接从源码运行：
+
+```bash
+pip install -e .
 vibemouse
 ```
+
+此时需为终端应用授予辅助功能权限。
 
 ## 默认映射与状态逻辑
 
