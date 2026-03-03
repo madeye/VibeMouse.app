@@ -1,23 +1,19 @@
 # VibeMouse
 
-面向 VibeCoding 的鼠标侧键语音输入工具。
+面向 macOS VibeCoding 的鼠标侧键语音输入工具。
 
 English README: [`README.md`](./README.md)
 
-AI 适配指南：
-- English: [`docs/AI_ASSISTANT_DEPLOYMENT.md`](./docs/AI_ASSISTANT_DEPLOYMENT.md)
-- 中文：[`docs/AI_ASSISTANT_DEPLOYMENT.zh-CN.md`](./docs/AI_ASSISTANT_DEPLOYMENT.zh-CN.md)
-
 ## 这个项目解决什么问题
 
-VibeMouse 把高频语音工作流绑定到鼠标侧键：
+VibeMouse 把高频语音工作流绑定到 macOS 鼠标侧键：
 - 前侧键：开始 / 结束录音
 - 空闲态按后侧键：发送 Enter
 - 录音态按后侧键：停止录音并把转写发送到 OpenClaw
 
 核心目标是低摩擦、可日常稳定使用，并且每个环节失败时都有回退路径。
 
-## 运行架构（核心）
+## 运行架构
 
 整体是事件驱动，按职责拆分：
 
@@ -26,32 +22,25 @@ VibeMouse 把高频语音工作流绑定到鼠标侧键：
 2. `vibemouse/app.py`
    - 编排按钮事件、录音状态、转写线程和输出路由
 3. `vibemouse/mouse_listener.py`
-   - 监听侧键与手势（优先 `evdev`，含回退）
+   - 通过 NSEvent 全局监听器（Quartz/AppKit）捕获侧键与手势
 4. `vibemouse/audio.py`
-   - 录音并写入临时 WAV
+   - 通过 sounddevice 录音并写入临时 WAV
 5. `vibemouse/transcriber.py`
-   - SenseVoice 后端选择与识别
+   - SenseVoice ASR 后端选择与识别（默认 ONNX，可选 PyTorch）
 6. `vibemouse/output.py`
    - 输入 / 剪贴板 / OpenClaw 路由与失败回退
 7. `vibemouse/system_integration.py`
-   - 平台适配边界（当前 Hyprland，可扩展 Windows/macOS）
+   - macOS 平台集成：Quartz CGEvent API、AppKit NSWorkspace、ApplicationServices 无障碍访问
 8. `vibemouse/doctor.py`
-   - 内置自检（环境、OpenClaw、输入权限、冲突绑定）
+   - 内置自检（环境、OpenClaw、辅助功能权限、音频输入）
 
-## 快速开始（Linux）
+## 快速开始
 
-### Ubuntu / Debian 依赖
+### 系统要求
 
-```bash
-sudo apt update
-sudo apt install -y python3-gi gir1.2-atspi-2.0 portaudio19-dev libsndfile1
-```
-
-### Arch 依赖
-
-```bash
-sudo pacman -Syu --needed python python-pip python-gobject portaudio libsndfile
-```
+- macOS 13+（Ventura 或更高）
+- Python 3.10+
+- 在系统设置 > 隐私与安全 > 辅助功能中为终端授权
 
 ### 安装
 
@@ -62,44 +51,16 @@ pip install -U pip
 pip install -e .
 ```
 
+默认安装走 ONNX 优先，部署体积更小。
+
+可选后端：
+- PyTorch/FunASR（支持 GPU）：`pip install -e ".[pt]"`
+- Intel NPU/OpenVINO：`pip install -e ".[npu]"`
+
 ### 运行
 
 ```bash
-export VIBEMOUSE_BACKEND=funasr_onnx
-export VIBEMOUSE_DEVICE=cpu
 vibemouse
-```
-
-默认安装走 ONNX 优先，部署体积更小。
-
-- 可选 PyTorch 后端（GPU/高级兜底）：`pip install -e ".[pt]"`
-- 可选 Intel NPU 依赖：`pip install -e ".[npu]"`
-
-### 一键自动部署（推荐）
-
-```bash
-bash scripts/auto-deploy.sh --preset stable
-```
-
-这个命令会自动完成 `.venv` 初始化、安装 VibeMouse、生成 service/env 文件、
-启用 `systemd --user` 服务并执行 `vibemouse doctor`。
-
-可选预设：
-- `stable`：日常稳定均衡
-- `fast`：更低去抖 + 更高 OpenClaw 重试
-- `low-resource`：更低后台资源占用
-
-示例：
-
-```bash
-# 稳定档
-bash scripts/auto-deploy.sh --preset stable
-
-# 低资源档
-bash scripts/auto-deploy.sh --preset low-resource
-
-# 指定你自己的 OpenClaw 助手
-bash scripts/auto-deploy.sh --preset stable --openclaw-agent ops
 ```
 
 ## 默认映射与状态逻辑
@@ -118,7 +79,7 @@ export VIBEMOUSE_FRONT_BUTTON=x2
 export VIBEMOUSE_REAR_BUTTON=x1
 ```
 
-## OpenClaw 集成（核心）
+## OpenClaw 集成
 
 OpenClaw 路由可配置：
 - `VIBEMOUSE_OPENCLAW_COMMAND`（默认 `openclaw`）
@@ -152,40 +113,12 @@ vibemouse doctor --fix
 - 配置加载是否有效
 - OpenClaw 命令是否可执行 + agent 是否存在
 - 麦克风输入设备可用性
-- Linux 输入设备权限 / 侧键能力
-- Hyprland 后侧键 Return 冲突绑定
-- `systemctl --user` 服务状态
-
-当前 `--fix` 自动修复项：
-- 自动禁用冲突的 Hyprland 侧键 Return 绑定
-- 尝试拉起处于 inactive 状态的 `vibemouse.service`
+- macOS 辅助功能权限状态
+- pyobjc 框架可用性
 
 只要存在 `FAIL`，命令退出码就是非零，方便自动化检测。
 
-## Deploy 命令
-
-也可以直接用 deploy 子命令：
-
-```bash
-vibemouse deploy --preset stable
-```
-
-常用参数：
-- `--preset stable|fast|low-resource`
-- `--openclaw-command "openclaw --profile prod"`
-- `--openclaw-agent main`
-- `--openclaw-retries 2`
-- `--log-file ~/.local/state/vibemouse/service.log`
-- `--skip-systemctl`
-- `--dry-run`
-
-建议开启持久化调试日志：
-
-```bash
-tail -f ~/.local/state/vibemouse/service.log
-```
-
-## 常用配置项
+## 配置项
 
 | 变量 | 默认值 | 作用 |
 |---|---|---|
@@ -194,29 +127,17 @@ tail -f ~/.local/state/vibemouse/service.log
 | `VIBEMOUSE_GESTURES_ENABLED` | `false` | 是否启用手势识别 |
 | `VIBEMOUSE_GESTURE_TRIGGER_BUTTON` | `rear` | 手势触发键（`front`、`rear`、`right`） |
 | `VIBEMOUSE_GESTURE_THRESHOLD_PX` | `120` | 手势识别阈值 |
-| `VIBEMOUSE_GESTURE_FREEZE_POINTER` | `true` | 手势期间是否冻结指针 |
 | `VIBEMOUSE_PREWARM_ON_START` | `true` | 启动预热，降低首次识别延迟 |
 | `VIBEMOUSE_PREWARM_DELAY_S` | `0.0` | 启动后延迟执行 ASR 预热，改善初始响应速度 |
-| `VIBEMOUSE_STATUS_FILE` | `$XDG_RUNTIME_DIR/vibemouse-status.json` | 运行状态文件（状态栏读取） |
+| `VIBEMOUSE_STATUS_FILE` | `$TMPDIR/vibemouse-status.json` | 运行状态文件（状态栏读取） |
 
 完整配置以 `vibemouse/config.py` 为准。
 
-## 故障排查（短版）
+## 故障排查
 
-### 录音时后侧键仍然发送回车
+### 侧键监听不到
 
-检查并移除 Hyprland 的硬绑定：
-
-```ini
-bind = , mouse:275, sendshortcut, , Return, activewindow
-bind = , mouse:276, sendshortcut, , Return, activewindow
-```
-
-然后重载：
-
-```bash
-hyprctl reload config-only
-```
+在系统设置 > 隐私与安全 > 辅助功能中为终端应用授权，然后重启终端。
 
 ### OpenClaw 路由异常
 
@@ -225,21 +146,9 @@ openclaw agent --agent main --message "ping" --json
 vibemouse doctor
 ```
 
-### Linux 下侧键监听不到
+### 无音频输入
 
-```bash
-sudo usermod -aG input $USER
-# 需要重新登录
-```
-
-## 给 AI 助手做平台适配
-
-请直接看这两份专用指南：
-
-- [`docs/AI_ASSISTANT_DEPLOYMENT.md`](./docs/AI_ASSISTANT_DEPLOYMENT.md)
-- [`docs/AI_ASSISTANT_DEPLOYMENT.zh-CN.md`](./docs/AI_ASSISTANT_DEPLOYMENT.zh-CN.md)
-
-里面包含：架构契约、依赖下载地址、平台适配流程、以及可直接复用的 AI 提示模板。
+检查麦克风是否可用且未静音。运行 `vibemouse doctor` 验证输入设备检测。
 
 ## License
 

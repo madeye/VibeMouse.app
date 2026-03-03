@@ -1,23 +1,17 @@
 # VibeMouse
 
-Mouse-side-button voice input for VibeCoding.
-
-中文文档：[`README.zh-CN.md`](./README.zh-CN.md)
-
-AI adaptation guides:
-- English: [`docs/AI_ASSISTANT_DEPLOYMENT.md`](./docs/AI_ASSISTANT_DEPLOYMENT.md)
-- 中文：[`docs/AI_ASSISTANT_DEPLOYMENT.zh-CN.md`](./docs/AI_ASSISTANT_DEPLOYMENT.zh-CN.md)
+Mouse-side-button voice input for macOS VibeCoding.
 
 ## What This Project Does
 
-VibeMouse binds your coding speech workflow to mouse side buttons:
+VibeMouse binds your coding speech workflow to mouse side buttons on macOS:
 - Front side button: start/stop recording
 - Rear side button while idle: send Enter
 - Rear side button while recording: stop recording and route transcript to OpenClaw
 
 Core goals are low friction, stable daily use, and graceful fallback when any subsystem fails.
 
-## Runtime Architecture (Core)
+## Runtime Architecture
 
 The runtime is event-driven and split by responsibility:
 
@@ -26,32 +20,25 @@ The runtime is event-driven and split by responsibility:
 2. `vibemouse/app.py`
    - Orchestrates button events, recording state, transcription workers, and final output routing
 3. `vibemouse/mouse_listener.py`
-   - Captures side buttons and gestures (`evdev` first, fallback path available)
+   - Captures side buttons and gestures via NSEvent global monitor (Quartz/AppKit)
 4. `vibemouse/audio.py`
-   - Records audio to temp WAV
+   - Records audio to temp WAV via sounddevice
 5. `vibemouse/transcriber.py`
-   - SenseVoice backend selection and transcription
+   - SenseVoice ASR backend selection and transcription (ONNX default, optional PyTorch)
 6. `vibemouse/output.py`
    - Text typing / clipboard / OpenClaw dispatch, with fallback and reason tracking
 7. `vibemouse/system_integration.py`
-   - Platform adapter boundary (Hyprland now, Windows/macOS extension points prepared)
+   - macOS platform integration via Quartz CGEvent APIs, AppKit NSWorkspace, and ApplicationServices accessibility
 8. `vibemouse/doctor.py`
-   - Built-in diagnostics for env, OpenClaw, input permissions, and known conflicts
+   - Built-in diagnostics for env, OpenClaw, accessibility permissions, and audio input
 
-## Quick Start (Linux)
+## Quick Start
 
-### Ubuntu / Debian packages
+### Requirements
 
-```bash
-sudo apt update
-sudo apt install -y python3-gi gir1.2-atspi-2.0 portaudio19-dev libsndfile1
-```
-
-### Arch packages
-
-```bash
-sudo pacman -Syu --needed python python-pip python-gobject portaudio libsndfile
-```
+- macOS 13+ (Ventura or later)
+- Python 3.10+
+- Grant Accessibility permission to your terminal in System Settings > Privacy & Security > Accessibility
 
 ### Install
 
@@ -62,44 +49,16 @@ pip install -U pip
 pip install -e .
 ```
 
+Default install uses ONNX for a smaller deployment footprint.
+
+Optional backends:
+- PyTorch/FunASR (GPU-capable): `pip install -e ".[pt]"`
+- Intel NPU/OpenVINO: `pip install -e ".[npu]"`
+
 ### Run
 
 ```bash
-export VIBEMOUSE_BACKEND=funasr_onnx
-export VIBEMOUSE_DEVICE=cpu
 vibemouse
-```
-
-Default install is ONNX-first for smaller deployment footprint.
-
-- Optional PyTorch backend (GPU/advanced fallback): `pip install -e ".[pt]"`
-- Optional Intel NPU dependencies: `pip install -e ".[npu]"`
-
-### One-command auto deploy (recommended)
-
-```bash
-bash scripts/auto-deploy.sh --preset stable
-```
-
-This command bootstraps `.venv`, installs VibeMouse, generates service/env files,
-enables `systemd --user` service, and runs `vibemouse doctor`.
-
-Available presets:
-- `stable`: balanced daily-driver defaults
-- `fast`: lower debounce + higher OpenClaw retries
-- `low-resource`: lower background footprint defaults
-
-Examples:
-
-```bash
-# High reliability profile
-bash scripts/auto-deploy.sh --preset stable
-
-# Keep resources low
-bash scripts/auto-deploy.sh --preset low-resource
-
-# Custom OpenClaw target assistant
-bash scripts/auto-deploy.sh --preset stable --openclaw-agent ops
 ```
 
 ## Default Mapping and State Logic
@@ -118,7 +77,7 @@ export VIBEMOUSE_FRONT_BUTTON=x2
 export VIBEMOUSE_REAR_BUTTON=x1
 ```
 
-## OpenClaw Integration (Core)
+## OpenClaw Integration
 
 OpenClaw route is explicit and configurable:
 - `VIBEMOUSE_OPENCLAW_COMMAND` (default `openclaw`)
@@ -152,40 +111,12 @@ Current checks include:
 - Config load validity
 - OpenClaw command resolution + agent existence
 - Microphone input availability
-- Linux input device permissions / side-button capability
-- Hyprland rear-button Return bind conflicts
-- `systemctl --user` service activity
-
-Current auto-fixes (`--fix`) include:
-- Auto-disable conflicting Hyprland side-button Return binds
-- Attempt to restart inactive `vibemouse.service`
+- macOS Accessibility permission status
+- pyobjc framework availability
 
 Exit code is non-zero when any `FAIL` check exists.
 
-## Deploy Command
-
-The deploy command is scriptable and can be used directly:
-
-```bash
-vibemouse deploy --preset stable
-```
-
-Useful flags:
-- `--preset stable|fast|low-resource`
-- `--openclaw-command "openclaw --profile prod"`
-- `--openclaw-agent main`
-- `--openclaw-retries 2`
-- `--log-file ~/.local/state/vibemouse/service.log`
-- `--skip-systemctl`
-- `--dry-run`
-
-Persistent debug logs (recommended):
-
-```bash
-tail -f ~/.local/state/vibemouse/service.log
-```
-
-## Frequently Used Variables
+## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -194,30 +125,17 @@ tail -f ~/.local/state/vibemouse/service.log
 | `VIBEMOUSE_GESTURES_ENABLED` | `false` | Enable gesture recognition |
 | `VIBEMOUSE_GESTURE_TRIGGER_BUTTON` | `rear` | Gesture trigger (`front`, `rear`, `right`) |
 | `VIBEMOUSE_GESTURE_THRESHOLD_PX` | `120` | Gesture movement threshold |
-| `VIBEMOUSE_GESTURE_FREEZE_POINTER` | `true` | Freeze pointer during gesture capture |
 | `VIBEMOUSE_PREWARM_ON_START` | `true` | Preload ASR on startup to reduce first-use latency |
 | `VIBEMOUSE_PREWARM_DELAY_S` | `0.0` | Delay ASR prewarm after startup to improve initial responsiveness |
-| `VIBEMOUSE_STATUS_FILE` | `$XDG_RUNTIME_DIR/vibemouse-status.json` | Runtime status for bars/widgets |
+| `VIBEMOUSE_STATUS_FILE` | `$TMPDIR/vibemouse-status.json` | Runtime status for bars/widgets |
 
 Full configuration source of truth: `vibemouse/config.py`.
 
-## Troubleshooting Shortlist
+## Troubleshooting
 
-### Rear button still sends Enter while recording
+### Side buttons not detected
 
-Check Hyprland-level hard bind conflict in
-`~/.config/hypr/UserConfigs/UserKeybinds.conf` and remove lines like:
-
-```ini
-bind = , mouse:275, sendshortcut, , Return, activewindow
-bind = , mouse:276, sendshortcut, , Return, activewindow
-```
-
-Then reload:
-
-```bash
-hyprctl reload config-only
-```
+Grant Accessibility permission to your terminal app in System Settings > Privacy & Security > Accessibility, then restart the terminal.
 
 ### OpenClaw route not working
 
@@ -226,22 +144,9 @@ openclaw agent --agent main --message "ping" --json
 vibemouse doctor
 ```
 
-### Side button not detected on Linux
+### No audio input
 
-```bash
-sudo usermod -aG input $USER
-# relogin required
-```
-
-## For AI Assistants and Platform Adapters
-
-Use this guide when adapting to Windows/macOS or custom environments:
-
-- [`docs/AI_ASSISTANT_DEPLOYMENT.md`](./docs/AI_ASSISTANT_DEPLOYMENT.md)
-- [`docs/AI_ASSISTANT_DEPLOYMENT.zh-CN.md`](./docs/AI_ASSISTANT_DEPLOYMENT.zh-CN.md)
-
-It contains architecture contracts, dependency download links, adaptation workflow,
-and a prompt template for autonomous platform adaptation.
+Check that your microphone is available and not muted. Run `vibemouse doctor` to verify input device detection.
 
 ## License
 
