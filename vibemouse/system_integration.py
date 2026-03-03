@@ -63,8 +63,6 @@ class SystemIntegration(Protocol):
         self, *, terminal_active: bool
     ) -> tuple[tuple[str, str], ...]: ...
 
-    def copy_to_clipboard(self, text: str) -> bool: ...
-
 
 def _load_quartz() -> object | None:
     try:
@@ -320,21 +318,6 @@ class MacOSSystemIntegration:
         if terminal_active:
             return (("CMD", "V"),)
         return (("CMD", "V"),)
-
-    def copy_to_clipboard(self, text: str) -> bool:
-        appkit = self._appkit
-        if appkit is None:
-            return False
-
-        try:
-            ns_pasteboard = getattr(appkit, "NSPasteboard")
-            ns_string_type = getattr(appkit, "NSPasteboardTypeString")
-            pb = ns_pasteboard.generalPasteboard()
-            pb.clearContents()
-            pb.setString_forType_(text, ns_string_type)
-            return True
-        except Exception:
-            return False
 
 
 def create_system_integration() -> MacOSSystemIntegration:
