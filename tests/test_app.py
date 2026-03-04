@@ -13,34 +13,10 @@ from unittest.mock import patch
 from vibemouse.app import VoiceMouseApp
 
 
-class VoiceMouseAppWorkspaceTests(unittest.TestCase):
+class VoiceMouseAppStatusTests(unittest.TestCase):
     @staticmethod
     def _make_subject() -> VoiceMouseApp:
         return object.__new__(VoiceMouseApp)
-
-    def test_switch_workspace_delegates_to_system_integration(self) -> None:
-        subject = self._make_subject()
-        setattr(
-            subject,
-            "_system_integration",
-            SimpleNamespace(switch_workspace=lambda direction: True),
-        )
-        switch = cast(Callable[[str], bool], getattr(subject, "_switch_workspace"))
-        self.assertTrue(switch("left"))
-
-    def test_switch_workspace_returns_false_on_exception(self) -> None:
-        subject = self._make_subject()
-
-        def fail_switch(direction: str) -> bool:
-            raise RuntimeError("workspace switch failed")
-
-        setattr(
-            subject,
-            "_system_integration",
-            SimpleNamespace(switch_workspace=fail_switch),
-        )
-        switch = cast(Callable[[str], bool], getattr(subject, "_switch_workspace"))
-        self.assertFalse(switch("right"))
 
     def test_set_recording_status_writes_recording_payload(self) -> None:
         subject = self._make_subject()

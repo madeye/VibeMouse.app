@@ -15,14 +15,6 @@ class LoadConfigTests(unittest.TestCase):
         self.assertFalse(config.trust_remote_code)
         self.assertEqual(config.transcriber_backend, "funasr_onnx")
         self.assertFalse(config.auto_paste)
-        self.assertFalse(config.gestures_enabled)
-        self.assertEqual(config.gesture_trigger_button, "rear")
-        self.assertEqual(config.gesture_threshold_px, 120)
-        self.assertTrue(config.gesture_restore_cursor)
-        self.assertEqual(config.gesture_up_action, "record_toggle")
-        self.assertEqual(config.gesture_down_action, "noop")
-        self.assertEqual(config.gesture_left_action, "noop")
-        self.assertEqual(config.gesture_right_action, "send_enter")
         self.assertEqual(config.enter_mode, "enter")
         self.assertEqual(config.button_debounce_ms, 150)
         self.assertTrue(config.prewarm_on_start)
@@ -55,22 +47,6 @@ class LoadConfigTests(unittest.TestCase):
             config = load_config()
 
         self.assertTrue(config.auto_paste)
-
-    def test_gestures_can_be_enabled(self) -> None:
-        with patch.dict(os.environ, {"VIBEMOUSE_GESTURES_ENABLED": "true"}, clear=True):
-            config = load_config()
-
-        self.assertTrue(config.gestures_enabled)
-
-    def test_gesture_restore_cursor_can_be_disabled(self) -> None:
-        with patch.dict(
-            os.environ,
-            {"VIBEMOUSE_GESTURE_RESTORE_CURSOR": "false"},
-            clear=True,
-        ):
-            config = load_config()
-
-        self.assertFalse(config.gesture_restore_cursor)
 
     def test_prewarm_on_start_can_be_disabled(self) -> None:
         with patch.dict(
@@ -133,54 +109,6 @@ class LoadConfigTests(unittest.TestCase):
             ):
                 _ = load_config()
 
-    def test_invalid_gesture_trigger_button_is_rejected(self) -> None:
-        with patch.dict(
-            os.environ,
-            {"VIBEMOUSE_GESTURE_TRIGGER_BUTTON": "middle"},
-            clear=True,
-        ):
-            with self.assertRaisesRegex(
-                ValueError,
-                "VIBEMOUSE_GESTURE_TRIGGER_BUTTON must be one of",
-            ):
-                _ = load_config()
-
-    def test_gesture_trigger_button_supports_right(self) -> None:
-        with patch.dict(
-            os.environ,
-            {"VIBEMOUSE_GESTURE_TRIGGER_BUTTON": "right"},
-            clear=True,
-        ):
-            config = load_config()
-
-        self.assertEqual(config.gesture_trigger_button, "right")
-
-    def test_gesture_action_supports_workspace_switches(self) -> None:
-        with patch.dict(
-            os.environ,
-            {
-                "VIBEMOUSE_GESTURE_LEFT_ACTION": "workspace_left",
-                "VIBEMOUSE_GESTURE_RIGHT_ACTION": "workspace_right",
-            },
-            clear=True,
-        ):
-            config = load_config()
-
-        self.assertEqual(config.gesture_left_action, "workspace_left")
-        self.assertEqual(config.gesture_right_action, "workspace_right")
-
-    def test_invalid_gesture_action_is_rejected(self) -> None:
-        with patch.dict(
-            os.environ,
-            {"VIBEMOUSE_GESTURE_UP_ACTION": "paste_now"},
-            clear=True,
-        ):
-            with self.assertRaisesRegex(
-                ValueError,
-                "VIBEMOUSE_GESTURE_UP_ACTION must be one of",
-            ):
-                _ = load_config()
-
     def test_negative_debounce_is_rejected(self) -> None:
         with patch.dict(os.environ, {"VIBEMOUSE_BUTTON_DEBOUNCE_MS": "-1"}, clear=True):
             with self.assertRaisesRegex(
@@ -201,18 +129,6 @@ class LoadConfigTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 ValueError,
                 "VIBEMOUSE_MERGE_LENGTH_S must be a positive integer",
-            ):
-                _ = load_config()
-
-    def test_non_positive_gesture_threshold_is_rejected(self) -> None:
-        with patch.dict(
-            os.environ,
-            {"VIBEMOUSE_GESTURE_THRESHOLD_PX": "0"},
-            clear=True,
-        ):
-            with self.assertRaisesRegex(
-                ValueError,
-                "VIBEMOUSE_GESTURE_THRESHOLD_PX must be a positive integer",
             ):
                 _ = load_config()
 

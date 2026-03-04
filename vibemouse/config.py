@@ -88,14 +88,6 @@ class AppConfig:
     merge_length_s: int
     fallback_to_cpu: bool
     button_debounce_ms: int
-    gestures_enabled: bool
-    gesture_trigger_button: str
-    gesture_threshold_px: int
-    gesture_restore_cursor: bool
-    gesture_up_action: str
-    gesture_down_action: str
-    gesture_left_action: str
-    gesture_right_action: str
     enter_mode: str
     auto_paste: bool
     audio_feedback: bool
@@ -142,44 +134,6 @@ def load_config() -> AppConfig:
         "VIBEMOUSE_BUTTON_DEBOUNCE_MS",
         _read_int("VIBEMOUSE_BUTTON_DEBOUNCE_MS", 150),
     )
-    gestures_enabled = _read_bool("VIBEMOUSE_GESTURES_ENABLED", False)
-    gesture_trigger_button = _read_choice(
-        "VIBEMOUSE_GESTURE_TRIGGER_BUTTON",
-        "rear",
-        {"front", "rear", "right"},
-    )
-    gesture_threshold_px = _require_positive(
-        "VIBEMOUSE_GESTURE_THRESHOLD_PX",
-        _read_int("VIBEMOUSE_GESTURE_THRESHOLD_PX", 120),
-    )
-    gesture_restore_cursor = _read_bool("VIBEMOUSE_GESTURE_RESTORE_CURSOR", True)
-    gesture_actions = {
-        "record_toggle",
-        "send_enter",
-        "workspace_left",
-        "workspace_right",
-        "noop",
-    }
-    gesture_up_action = _read_choice(
-        "VIBEMOUSE_GESTURE_UP_ACTION",
-        "record_toggle",
-        gesture_actions,
-    )
-    gesture_down_action = _read_choice(
-        "VIBEMOUSE_GESTURE_DOWN_ACTION",
-        "noop",
-        gesture_actions,
-    )
-    gesture_left_action = _read_choice(
-        "VIBEMOUSE_GESTURE_LEFT_ACTION",
-        "noop",
-        gesture_actions,
-    )
-    gesture_right_action = _read_choice(
-        "VIBEMOUSE_GESTURE_RIGHT_ACTION",
-        "send_enter",
-        gesture_actions,
-    )
     enter_mode = _read_choice(
         "VIBEMOUSE_ENTER_MODE",
         "enter",
@@ -224,14 +178,6 @@ def load_config() -> AppConfig:
         merge_length_s=merge_length_s,
         fallback_to_cpu=_read_bool("VIBEMOUSE_FALLBACK_CPU", True),
         button_debounce_ms=button_debounce_ms,
-        gestures_enabled=gestures_enabled,
-        gesture_trigger_button=gesture_trigger_button,
-        gesture_threshold_px=gesture_threshold_px,
-        gesture_restore_cursor=gesture_restore_cursor,
-        gesture_up_action=gesture_up_action,
-        gesture_down_action=gesture_down_action,
-        gesture_left_action=gesture_left_action,
-        gesture_right_action=gesture_right_action,
         enter_mode=enter_mode,
         auto_paste=_read_bool("VIBEMOUSE_AUTO_PASTE", False),
         audio_feedback=_read_bool("VIBEMOUSE_AUDIO_FEEDBACK", True),

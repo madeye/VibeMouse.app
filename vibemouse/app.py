@@ -4,14 +4,17 @@ import json
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 from vibemouse import audio_feedback
 from vibemouse.audio import AudioRecorder, AudioRecording
 from vibemouse.config import AppConfig
 from vibemouse.mouse_listener import SideButtonListener
 from vibemouse.output import TextOutput
-from vibemouse.system_integration import SystemIntegration, create_system_integration
+from vibemouse.system_integration import create_system_integration
 from vibemouse.transcriber import SenseVoiceTranscriber
 
 
@@ -29,7 +32,7 @@ class VoiceMouseApp:
             raise ValueError("Front and rear side buttons must be different")
 
         self._config: AppConfig = config
-        self._system_integration: SystemIntegration = create_system_integration()
+        self._system_integration = create_system_integration()
         self._recorder: AudioRecorder = AudioRecorder(
             sample_rate=config.sample_rate,
             channels=config.channels,
@@ -48,15 +51,9 @@ class VoiceMouseApp:
         self._listener: SideButtonListener = SideButtonListener(
             on_front_press=self._on_front_press,
             on_rear_press=self._on_rear_press,
-            on_gesture=self._on_gesture,
             front_button=config.front_button,
             rear_button=config.rear_button,
             debounce_s=config.button_debounce_ms / 1000.0,
-            gestures_enabled=config.gestures_enabled,
-            gesture_trigger_button=config.gesture_trigger_button,
-            gesture_threshold_px=config.gesture_threshold_px,
-            gesture_restore_cursor=config.gesture_restore_cursor,
-            system_integration=self._system_integration,
         )
         self._on_status_change_callback = on_status_change
         self._stop_event: threading.Event = threading.Event()
@@ -74,10 +71,6 @@ class VoiceMouseApp:
             + f"backend={self._config.transcriber_backend}, auto_paste={self._config.auto_paste}, "
             + f"enter_mode={self._config.enter_mode}, debounce_ms={self._config.button_debounce_ms}, "
             + f"front_button={self._config.front_button}, rear_button={self._config.rear_button}, "
-            + f"gestures_enabled={self._config.gestures_enabled}, "
-            + f"gesture_trigger={self._config.gesture_trigger_button}, "
-            + f"gesture_threshold_px={self._config.gesture_threshold_px}, "
-            + f"gesture_restore_cursor={self._config.gesture_restore_cursor}, "
             + f"prewarm_on_start={self._config.prewarm_on_start}, "
             + f"prewarm_delay_s={self._config.prewarm_delay_s}. "
             + "Press side-front to start/stop recording. While recording, side-rear sends transcript to OpenClaw; otherwise side-rear sends Enter."
@@ -151,59 +144,6 @@ class VoiceMouseApp:
                 print("Enter key sent")
         except Exception as error:
             print(f"Failed to send Enter: {error}")
-
-    def _on_gesture(self, direction: str) -> None:
-        action = self._resolve_gesture_action(direction)
-        if action == "noop":
-            print(f"Gesture '{direction}' recognized with no action configured")
-            return
-
-        if action == "record_toggle":
-            print(f"Gesture '{direction}' -> toggle recording")
-            self._on_front_press()
-            return
-
-        if action == "send_enter":
-            mode = self._config.enter_mode
-            if mode == "none":
-                mode = "enter"
-            try:
-                self._output.send_enter(mode=mode)
-                print(f"Gesture '{direction}' -> send enter ({mode})")
-            except Exception as error:
-                print(f"Gesture '{direction}' failed to send enter: {error}")
-            return
-
-        if action == "workspace_left":
-            if self._switch_workspace("left"):
-                print(f"Gesture '{direction}' -> switch workspace left")
-            else:
-                print(f"Gesture '{direction}' failed to switch workspace left")
-            return
-
-        if action == "workspace_right":
-            if self._switch_workspace("right"):
-                print(f"Gesture '{direction}' -> switch workspace right")
-            else:
-                print(f"Gesture '{direction}' failed to switch workspace right")
-            return
-
-        print(f"Gesture '{direction}' mapped to unknown action '{action}'")
-
-    def _resolve_gesture_action(self, direction: str) -> str:
-        mapping = {
-            "up": self._config.gesture_up_action,
-            "down": self._config.gesture_down_action,
-            "left": self._config.gesture_left_action,
-            "right": self._config.gesture_right_action,
-        }
-        return mapping.get(direction, "noop")
-
-    def _switch_workspace(self, direction: str) -> bool:
-        try:
-            return bool(self._system_integration.switch_workspace(direction))
-        except Exception:
-            return False
 
     def _stop_recording(self) -> AudioRecording | None:
         try:

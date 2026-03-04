@@ -45,12 +45,6 @@ class SystemIntegration(Protocol):
 
     def active_window(self) -> dict[str, object] | None: ...
 
-    def cursor_position(self) -> tuple[int, int] | None: ...
-
-    def move_cursor(self, *, x: int, y: int) -> bool: ...
-
-    def switch_workspace(self, direction: str) -> bool: ...
-
     def type_text(self, text: str) -> bool | None: ...
 
     def is_text_input_focused(self) -> bool | None: ...
@@ -262,57 +256,6 @@ class MacOSSystemIntegration:
             return True
         except Exception:
             return None
-
-    def cursor_position(self) -> tuple[int, int] | None:
-        quartz = self._quartz
-        if quartz is None:
-            return None
-
-        try:
-            create_event = getattr(quartz, "CGEventCreate")
-            get_location = getattr(quartz, "CGEventGetLocation")
-            event = create_event(None)
-            point = get_location(event)
-            return int(point.x), int(point.y)
-        except Exception:
-            return None
-
-    def move_cursor(self, *, x: int, y: int) -> bool:
-        quartz = self._quartz
-        if quartz is None:
-            return False
-
-        try:
-            warp = getattr(quartz, "CGWarpMouseCursorPosition")
-            cg_point = getattr(quartz, "CGPoint")
-            warp(cg_point(x, y))
-            return True
-        except Exception:
-            return False
-
-    def switch_workspace(self, direction: str) -> bool:
-        quartz = self._quartz
-        if quartz is None:
-            return False
-
-        arrow_code = 123 if direction == "left" else 124  # Left / Right arrow
-        try:
-            create_event = getattr(quartz, "CGEventCreateKeyboardEvent")
-            set_flags = getattr(quartz, "CGEventSetFlags")
-            post_event = getattr(quartz, "CGEventPost")
-            k_hid = getattr(quartz, "kCGHIDEventTap")
-
-            ctrl_flag = _MACOS_MODIFIER_FLAGS["CTRL"]
-            down = create_event(None, arrow_code, True)
-            set_flags(down, ctrl_flag)
-            post_event(k_hid, down)
-
-            up = create_event(None, arrow_code, False)
-            set_flags(up, ctrl_flag)
-            post_event(k_hid, up)
-            return True
-        except Exception:
-            return False
 
     def paste_shortcuts(self, *, terminal_active: bool) -> tuple[tuple[str, str], ...]:
         if terminal_active:
