@@ -11,7 +11,7 @@ VibeMouse 把高频语音工作流绑定到 macOS 鼠标侧键：
 - 空闲态按后侧键：发送 Enter
 - 录音态按后侧键：停止录音并转写
 
-核心目标是低摩擦、可日常稳定使用，并且每个环节失败时都有回退路径。
+所有语音识别均通过 SenseVoice ONNX 在本地运行——无需 API 密钥、无需云端、数据不离开你的 Mac。
 
 ## 运行架构
 
@@ -19,15 +19,15 @@ VibeMouse 把高频语音工作流绑定到 macOS 鼠标侧键：
 
 1. `vibemouse/app.py`
    - 编排按钮事件、录音状态、转写线程和输出路由
-3. `vibemouse/mouse_listener.py`
-   - 通过 NSEvent 全局监听器（Quartz/AppKit）捕获侧键与手势
-4. `vibemouse/audio.py`
+2. `vibemouse/mouse_listener.py`
+   - 通过 NSEvent 全局监听器（Quartz/AppKit）捕获侧键
+3. `vibemouse/audio.py`
    - 通过 sounddevice 录音并写入临时 WAV
-5. `vibemouse/transcriber.py`
-   - SenseVoice ASR 后端选择与识别（默认 ONNX，可选 PyTorch）
-6. `vibemouse/output.py`
+4. `vibemouse/transcriber.py`
+   - SenseVoice ASR 转写（ONNX Runtime）
+5. `vibemouse/output.py`
    - 输入 / 剪贴板路由与失败回退
-7. `vibemouse/system_integration.py`
+6. `vibemouse/system_integration.py`
    - macOS 平台集成：Quartz CGEvent API、AppKit NSWorkspace、ApplicationServices 无障碍访问
 
 ## 快速开始
@@ -38,12 +38,23 @@ VibeMouse 把高频语音工作流绑定到 macOS 鼠标侧键：
 - Python 3.10+
 - Xcode 命令行工具（`xcode-select --install`）
 
-### 构建 VibeMouse.app
+### 方式 A — 直接下载
+
+从 [最新发布页](https://github.com/madeye/VibeMouse.app/releases/latest) 下载 VibeMouse.app，解压后移动到 `/Applications`。
+
+### 方式 B — 从源码构建
+
+一键构建（创建虚拟环境、安装依赖、下载模型、PyInstaller 打包并签名）：
 
 ```bash
-git clone https://github.com/anthropics/VibeMouse.app.git
+git clone https://github.com/madeye/VibeMouse.app.git
 cd VibeMouse.app
+bash build/build_macos_app.sh
+```
 
+或逐步执行：
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
@@ -53,16 +64,10 @@ pip install -e ".[dev,download]"
 python scripts/download_model.py
 
 # 使用 PyInstaller 构建 .app
-pyinstaller --noconfirm --windowed \
-  --name VibeMouse \
-  --icon vibemouse/macos/resources/VibeMouse.icns \
-  --add-data "vibemouse/models:vibemouse/models" \
-  --add-data "vibemouse/macos/resources:vibemouse/macos/resources" \
-  --osx-bundle-identifier com.vibemouse.app \
-  vibemouse/macos_entry.py
+pyinstaller --noconfirm VibeMouse.spec
 ```
 
-构建产物位于 `dist/VibeMouse.app`。
+构建产物位于 `dist/VibeMouse.app`。应用包含完整 Python 运行时，用户无需安装 Python。
 
 ### 安装
 
@@ -109,11 +114,11 @@ export VIBEMOUSE_REAR_BUTTON=x1
 |---|---|---|
 | `VIBEMOUSE_ENTER_MODE` | `enter` | 后侧键提交模式（`enter`、`ctrl_enter`、`shift_enter`、`none`） |
 | `VIBEMOUSE_AUTO_PASTE` | `false` | 回退到剪贴板后是否自动粘贴 |
-| `VIBEMOUSE_GESTURES_ENABLED` | `false` | 是否启用手势识别 |
-| `VIBEMOUSE_GESTURE_TRIGGER_BUTTON` | `rear` | 手势触发键（`front`、`rear`、`right`） |
-| `VIBEMOUSE_GESTURE_THRESHOLD_PX` | `120` | 手势识别阈值 |
+| `VIBEMOUSE_AUDIO_FEEDBACK` | `true` | 录音事件音频反馈 |
 | `VIBEMOUSE_PREWARM_ON_START` | `true` | 启动预热，降低首次识别延迟 |
 | `VIBEMOUSE_PREWARM_DELAY_S` | `0.0` | 启动后延迟执行 ASR 预热，改善初始响应速度 |
+| `VIBEMOUSE_FRONT_BUTTON` | `x1` | 录音切换键 |
+| `VIBEMOUSE_REAR_BUTTON` | `x2` | 回车 / 转写键 |
 | `VIBEMOUSE_STATUS_FILE` | `$TMPDIR/vibemouse-status.json` | 运行状态文件（状态栏读取） |
 
 完整配置以 `vibemouse/config.py` 为准。
@@ -122,11 +127,11 @@ export VIBEMOUSE_REAR_BUTTON=x1
 
 ### 侧键监听不到
 
-在系统设置 > 隐私与安全 > 辅助功能中为终端应用授权，然后重启终端。
+在系统设置 > 隐私与安全 > 辅助功能中为 VibeMouse.app（或终端应用）授权，然后重启。
 
 ### 无音频输入
 
-检查麦克风是否可用且未静音。
+检查麦克风是否可用且未静音。通过菜单栏图标选择正确的输入设备。
 
 ## License
 

@@ -9,7 +9,7 @@ VibeMouse binds your coding speech workflow to mouse side buttons on macOS:
 - Rear side button while idle: send Enter
 - Rear side button while recording: stop recording and transcribe
 
-Core goals are low friction, stable daily use, and graceful fallback when any subsystem fails.
+All speech recognition runs locally on-device via SenseVoice ONNX — no API keys, no cloud, no data leaves your Mac.
 
 ## Runtime Architecture
 
@@ -17,15 +17,15 @@ The runtime is event-driven and split by responsibility:
 
 1. `vibemouse/app.py`
    - Orchestrates button events, recording state, transcription workers, and final output routing
-3. `vibemouse/mouse_listener.py`
-   - Captures side buttons and gestures via NSEvent global monitor (Quartz/AppKit)
-4. `vibemouse/audio.py`
+2. `vibemouse/mouse_listener.py`
+   - Captures side buttons via NSEvent global monitor (Quartz/AppKit)
+3. `vibemouse/audio.py`
    - Records audio to temp WAV via sounddevice
-5. `vibemouse/transcriber.py`
+4. `vibemouse/transcriber.py`
    - SenseVoice ASR transcription via ONNX Runtime
-6. `vibemouse/output.py`
+5. `vibemouse/output.py`
    - Text typing / clipboard dispatch, with fallback and reason tracking
-7. `vibemouse/system_integration.py`
+6. `vibemouse/system_integration.py`
    - macOS platform integration via Quartz CGEvent APIs, AppKit NSWorkspace, and ApplicationServices accessibility
 
 ## Quick Start
@@ -36,14 +36,18 @@ The runtime is event-driven and split by responsibility:
 - Python 3.10+
 - Xcode Command Line Tools (`xcode-select --install`)
 
-### Build VibeMouse.app
+### Option A — Download
 
-One-step build (creates venv, installs deps, downloads model, runs PyInstaller):
+Grab [VibeMouse.app](https://github.com/madeye/VibeMouse.app/releases/latest) from the latest release, unzip, and move to `/Applications`.
+
+### Option B — Build from Source
+
+One-step build (creates venv, installs deps, downloads model, runs PyInstaller, code signs):
 
 ```bash
-git clone https://github.com/anthropics/VibeMouse.app.git
+git clone https://github.com/madeye/VibeMouse.app.git
 cd VibeMouse.app
-./scripts/build_app.sh
+bash build/build_macos_app.sh
 ```
 
 Or step by step:
@@ -108,11 +112,11 @@ export VIBEMOUSE_REAR_BUTTON=x1
 |---|---|---|
 | `VIBEMOUSE_ENTER_MODE` | `enter` | Rear-button submit mode (`enter`, `ctrl_enter`, `shift_enter`, `none`) |
 | `VIBEMOUSE_AUTO_PASTE` | `false` | Auto paste when route falls back to clipboard |
-| `VIBEMOUSE_GESTURES_ENABLED` | `false` | Enable gesture recognition |
-| `VIBEMOUSE_GESTURE_TRIGGER_BUTTON` | `rear` | Gesture trigger (`front`, `rear`, `right`) |
-| `VIBEMOUSE_GESTURE_THRESHOLD_PX` | `120` | Gesture movement threshold |
+| `VIBEMOUSE_AUDIO_FEEDBACK` | `true` | Play audio feedback sounds for recording events |
 | `VIBEMOUSE_PREWARM_ON_START` | `true` | Preload ASR on startup to reduce first-use latency |
 | `VIBEMOUSE_PREWARM_DELAY_S` | `0.0` | Delay ASR prewarm after startup to improve initial responsiveness |
+| `VIBEMOUSE_FRONT_BUTTON` | `x1` | Mouse button for record toggle |
+| `VIBEMOUSE_REAR_BUTTON` | `x2` | Mouse button for enter / transcribe |
 | `VIBEMOUSE_STATUS_FILE` | `$TMPDIR/vibemouse-status.json` | Runtime status for bars/widgets |
 
 Full configuration source of truth: `vibemouse/config.py`.
@@ -121,11 +125,11 @@ Full configuration source of truth: `vibemouse/config.py`.
 
 ### Side buttons not detected
 
-Grant Accessibility permission to your terminal app in System Settings > Privacy & Security > Accessibility, then restart the terminal.
+Grant Accessibility permission to VibeMouse.app (or your terminal) in System Settings > Privacy & Security > Accessibility, then restart.
 
 ### No audio input
 
-Check that your microphone is available and not muted.
+Check that your microphone is available and not muted. Use the menu-bar icon to select the correct input device.
 
 ## License
 
