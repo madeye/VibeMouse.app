@@ -263,7 +263,7 @@
         <span class="badge">Apache-2.0</span>
       </div>
       <div class="cta">
-        <a href="https://github.com/madeye/VibeMouse.app/releases/latest" class="btn btn-primary">Download v0.1.0</a>
+        <a href="https://github.com/madeye/VibeMouse.app/releases/latest" class="btn btn-primary">Download v0.2.0</a>
         <a href="#quickstart" class="btn btn-secondary">Build from Source</a>
         <a href="https://github.com/madeye/VibeMouse.app" class="btn btn-secondary">View on GitHub</a>
       </div>
@@ -304,8 +304,8 @@
           <p>Fast, accurate speech recognition running locally on CPU via ONNX Runtime. No GPU required.</p>
         </div>
         <div class="feat-card">
-          <h3>Gesture Recognition</h3>
-          <p>Swipe while holding a side button to trigger custom actions&mdash;workspace switching, record toggles, and more.</p>
+          <h3>Menu-Bar Native</h3>
+          <p>Runs as a menu-bar accessory&mdash;select input devices, toggle Start at Login, and configure from the icon. No Dock clutter.</p>
         </div>
         <div class="feat-card">
           <h3>Smart Output Routing</h3>
@@ -359,8 +359,8 @@ open dist/VibeMouse.app</code></pre>
           </thead>
           <tbody>
             <tr><td><code>VIBEMOUSE_ENTER_MODE</code></td><td><code>enter</code></td><td>Rear-button submit: <code>enter</code>, <code>ctrl_enter</code>, <code>shift_enter</code>, <code>none</code></td></tr>
-            <tr><td><code>VIBEMOUSE_GESTURES_ENABLED</code></td><td><code>false</code></td><td>Enable gesture recognition</td></tr>
             <tr><td><code>VIBEMOUSE_AUTO_PASTE</code></td><td><code>false</code></td><td>Auto-paste when output falls back to clipboard</td></tr>
+            <tr><td><code>VIBEMOUSE_AUDIO_FEEDBACK</code></td><td><code>true</code></td><td>Play audio feedback sounds for recording events</td></tr>
             <tr><td><code>VIBEMOUSE_PREWARM_ON_START</code></td><td><code>true</code></td><td>Preload ASR model on startup</td></tr>
             <tr><td><code>VIBEMOUSE_FRONT_BUTTON</code></td><td><code>x1</code></td><td>Mouse button for record toggle</td></tr>
             <tr><td><code>VIBEMOUSE_REAR_BUTTON</code></td><td><code>x2</code></td><td>Mouse button for enter / transcribe</td></tr>

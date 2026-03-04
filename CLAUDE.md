@@ -4,15 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-VibeMouse is a macOS mouse side-button voice input daemon. It binds speech-to-text to mouse side buttons: front button toggles recording, rear button sends Enter when idle or stops recording and transcribes when recording. ASR uses SenseVoice (ONNX-first, optional PyTorch backend). Platform integration uses Quartz/AppKit via pyobjc.
+VibeMouse is a macOS mouse side-button voice input app. It binds speech-to-text to mouse side buttons: front button toggles recording, rear button sends Enter when idle or dispatches transcript when recording. ASR uses SenseVoice (ONNX-first, optional PyTorch backend). Platform integration uses Quartz/AppKit via pyobjc. Runs as a menu-bar accessory (no Dock icon).
 
-## Build & Install
+## Build & Run
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .                  # ONNX-only (default), includes pyobjc
 pip install -e ".[pt]"            # + PyTorch/FunASR backend
 pip install -e ".[npu]"           # + Intel NPU/OpenVINO
+bash build/build_macos_app.sh     # build + code sign VibeMouse.app
+open dist/VibeMouse.app           # run
 ```
 
 ## Testing
@@ -30,7 +32,7 @@ Tests use `unittest` with `unittest.mock`. No external test fixtures or CI-speci
 ### Event-driven runtime flow
 
 `macos_entry.py` → `app.py (VoiceMouseApp)` → wires together all subsystems:
-- **Mouse input**: `SideButtonListener` (NSEvent global monitor via Quartz/AppKit) fires `_on_front_press` / `_on_rear_press` / `_on_gesture` callbacks
+- **Mouse input**: `SideButtonListener` (NSEvent global monitor via Quartz/AppKit) fires `_on_front_press` / `_on_rear_press` callbacks
 - **Audio**: `AudioRecorder` captures mic to temp WAV via sounddevice
 - **Transcription**: `SenseVoiceTranscriber` with lazy-loaded backend (`_FunASRONNXBackend` or `_FunASRBackend`), runs in daemon threads under `_transcribe_lock`
 - **Output routing**: `TextOutput.inject_or_clipboard()` routes text to the focused app, clipboard, or paste. Falls back clipboard → typed → pasted with reason tracking
