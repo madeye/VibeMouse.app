@@ -243,7 +243,7 @@ class VibemouseAppDelegate(NSObject):  # type: ignore[misc]
             return []
         names: list[str] = []
         seen: set[str] = set()
-        if not isinstance(devices, list):
+        if isinstance(devices, dict):
             devices = [devices]
         for dev in devices:
             if isinstance(dev, dict) and dev.get("max_input_channels", 0) > 0:
