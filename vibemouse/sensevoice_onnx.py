@@ -158,7 +158,8 @@ def _extract_fbank(
     frame_opts.frame_length_ms = 25.0
     frame_opts.frame_shift_ms = 10.0
     frame_opts.dither = 0.0
-    frame_opts.snip_edges = False
+    frame_opts.window_type = "hamming"
+    frame_opts.snip_edges = True
 
     mel_opts = MelBanksOptions()
     mel_opts.num_bins = n_mels
@@ -166,9 +167,11 @@ def _extract_fbank(
     opts = FbankOptions()
     opts.frame_opts = frame_opts
     opts.mel_opts = mel_opts
+    opts.energy_floor = 0.0
 
     fbank = OnlineFbank(opts)
-    fbank.accept_waveform(sample_rate, audio.tolist())
+    # Scale to int16 range — SenseVoice was trained with waveform * (1 << 15)
+    fbank.accept_waveform(sample_rate, (audio * (1 << 15)).tolist())
     fbank.input_finished()
 
     n_frames = fbank.num_frames_ready
@@ -182,25 +185,24 @@ def _extract_fbank(
 def _apply_lfr(feats: np.ndarray, lfr_m: int, lfr_n: int) -> np.ndarray:
     """Stack ``lfr_m`` consecutive frames, subsample every ``lfr_n`` frames."""
     T, D = feats.shape
-    # Pad so T is divisible by lfr_n
-    pad_len = (lfr_n - (T % lfr_n)) % lfr_n
-    if pad_len > 0:
-        feats = np.pad(feats, ((0, pad_len), (0, 0)), mode="constant")
+    T_lfr = int(np.ceil(T / lfr_n))
+
+    # Left-pad by repeating the first frame (matches FunASR reference)
+    left_pad = (lfr_m - 1) // 2
+    if left_pad > 0:
+        feats = np.vstack((np.tile(feats[0], (left_pad, 1)), feats))
         T = feats.shape[0]
 
-    n_lfr = T // lfr_n
-    lfr_feats = np.empty((n_lfr, lfr_m * D), dtype=np.float32)
-    for i in range(n_lfr):
+    # Right-pad by repeating the last frame
+    right_pad = T_lfr * lfr_n + lfr_m - 1 - left_pad - T
+    if right_pad > 0:
+        feats = np.vstack((feats, np.tile(feats[-1], (right_pad, 1))))
+        T = feats.shape[0]
+
+    lfr_feats = np.empty((T_lfr, lfr_m * D), dtype=np.float32)
+    for i in range(T_lfr):
         start = i * lfr_n
-        # Stack lfr_m frames starting at `start`, padding with zeros if needed
-        frames = []
-        for j in range(lfr_m):
-            idx = start + j
-            if idx < T:
-                frames.append(feats[idx])
-            else:
-                frames.append(np.zeros(D, dtype=np.float32))
-        lfr_feats[i] = np.concatenate(frames)
+        lfr_feats[i] = feats[start : start + lfr_m].reshape(-1)
 
     return lfr_feats
 

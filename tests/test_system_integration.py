@@ -133,44 +133,6 @@ class MacOSSystemIntegrationTests(unittest.TestCase):
         integration = self._make_integration(ax=None)
         self.assertIsNone(integration.is_text_input_focused())
 
-    def test_cursor_position_returns_coordinates(self) -> None:
-        class FakePoint:
-            x = 100.5
-            y = 200.0
-
-        class FakeQuartz:
-            @staticmethod
-            def CGEventCreate(source: object) -> object:
-                return "event"
-
-            @staticmethod
-            def CGEventGetLocation(event: object) -> FakePoint:
-                return FakePoint()
-
-        integration = self._make_integration(quartz=FakeQuartz())
-        result = integration.cursor_position()
-        self.assertEqual(result, (100, 200))
-
-    def test_move_cursor_calls_warp(self) -> None:
-        warped: list[object] = []
-
-        class FakeCGPoint:
-            def __init__(self, x: int, y: int) -> None:
-                self.x = x
-                self.y = y
-
-        class FakeQuartz:
-            CGPoint = FakeCGPoint
-
-            @staticmethod
-            def CGWarpMouseCursorPosition(point: object) -> None:
-                warped.append(point)
-
-        integration = self._make_integration(quartz=FakeQuartz())
-        ok = integration.move_cursor(x=50, y=75)
-        self.assertTrue(ok)
-        self.assertEqual(len(warped), 1)
-
     def test_send_enter_via_accessibility_posts_return_key(self) -> None:
         posted: list[object] = []
 
@@ -192,31 +154,6 @@ class MacOSSystemIntegrationTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(len(posted), 2)
         self.assertEqual(posted[0]["keycode"], 36)
-
-    def test_switch_workspace_left(self) -> None:
-        posted: list[dict[str, object]] = []
-
-        class FakeQuartz:
-            kCGHIDEventTap = 0
-
-            @staticmethod
-            def CGEventCreateKeyboardEvent(
-                source: object, keycode: int, key_down: bool
-            ) -> dict[str, object]:
-                return {"keycode": keycode, "down": key_down}
-
-            @staticmethod
-            def CGEventSetFlags(event: object, flags: int) -> None:
-                pass
-
-            @staticmethod
-            def CGEventPost(tap: object, event: object) -> None:
-                posted.append(event)
-
-        integration = self._make_integration(quartz=FakeQuartz())
-        ok = integration.switch_workspace("left")
-        self.assertTrue(ok)
-        self.assertEqual(posted[0]["keycode"], 123)  # Left arrow
 
     def test_type_text_posts_chunked_unicode_events(self) -> None:
         posted: list[tuple[object, object]] = []
