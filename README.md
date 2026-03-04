@@ -15,9 +15,7 @@ Core goals are low friction, stable daily use, and graceful fallback when any su
 
 The runtime is event-driven and split by responsibility:
 
-1. `vibemouse/main.py`
-   - CLI entry (`run` / `doctor`)
-2. `vibemouse/app.py`
+1. `vibemouse/app.py`
    - Orchestrates button events, recording state, transcription workers, and final output routing
 3. `vibemouse/mouse_listener.py`
    - Captures side buttons and gestures via NSEvent global monitor (Quartz/AppKit)
@@ -29,8 +27,6 @@ The runtime is event-driven and split by responsibility:
    - Text typing / clipboard dispatch, with fallback and reason tracking
 7. `vibemouse/system_integration.py`
    - macOS platform integration via Quartz CGEvent APIs, AppKit NSWorkspace, and ApplicationServices accessibility
-8. `vibemouse/doctor.py`
-   - Built-in diagnostics for env, accessibility permissions, and audio input
 
 ## Quick Start
 
@@ -90,17 +86,6 @@ On first launch, grant these in **System Settings > Privacy & Security**:
 - **Accessibility** — required for mouse side-button capture and keyboard synthesis
 - **Microphone** — required for audio recording
 
-### Development mode
-
-To run from source without building the .app:
-
-```bash
-pip install -e .
-vibemouse
-```
-
-Grant Accessibility permission to your terminal app instead.
-
 ## Default Mapping and State Logic
 
 - `VIBEMOUSE_FRONT_BUTTON` default: `x1`
@@ -116,28 +101,6 @@ If your hardware labels are reversed:
 export VIBEMOUSE_FRONT_BUTTON=x2
 export VIBEMOUSE_REAR_BUTTON=x1
 ```
-
-## Built-in Doctor
-
-Run diagnostics:
-
-```bash
-vibemouse doctor
-```
-
-Apply safe auto-fixes first, then re-check:
-
-```bash
-vibemouse doctor --fix
-```
-
-Current checks include:
-- Config load validity
-- Microphone input availability
-- macOS Accessibility permission status
-- pyobjc framework availability
-
-Exit code is non-zero when any `FAIL` check exists.
 
 ## Configuration
 
@@ -162,7 +125,7 @@ Grant Accessibility permission to your terminal app in System Settings > Privacy
 
 ### No audio input
 
-Check that your microphone is available and not muted. Run `vibemouse doctor` to verify input device detection.
+Check that your microphone is available and not muted.
 
 ## License
 

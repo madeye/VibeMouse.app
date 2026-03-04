@@ -312,10 +312,6 @@
           <p>Types text directly into the focused app. Falls back to clipboard or paste automatically with reason tracking.</p>
         </div>
         <div class="feat-card">
-          <h3>Built-in Doctor</h3>
-          <p>Run <code>vibemouse doctor</code> to diagnose permissions, audio input, and config issues.</p>
-        </div>
-        <div class="feat-card">
           <h3>Zero External Services</h3>
           <p>All speech recognition runs on-device. No API keys, no cloud dependencies, no data leaves your Mac.</p>
         </div>
@@ -345,17 +341,8 @@ bash build/build_macos_app.sh
 open dist/VibeMouse.app</code></pre>
           <p class="note">The build script creates a virtualenv, downloads the SenseVoice ONNX model, and packages everything into a signed <code>.app</code> bundle via PyInstaller.</p>
         </div>
-        <div class="step">
-          <div class="step-label">Option C &mdash; pip install</div>
-          <pre><code>python3 -m venv .venv &amp;&amp; source .venv/bin/activate
-pip install -e .
-vibemouse</code></pre>
-        </div>
-        <div class="step">
-          <div class="step-label">Diagnose</div>
-          <pre><code>vibemouse doctor          # check everything
-vibemouse doctor --fix    # auto-fix then re-check</code></pre>
-        </div>
+
+
       </div>
     </div>
   </section>

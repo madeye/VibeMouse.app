@@ -53,7 +53,7 @@ hiddenimports = [
     "vibemouse.audio",
     "vibemouse.audio_feedback",
     "vibemouse.config",
-    "vibemouse.doctor",
+
     "vibemouse.mouse_listener",
     "vibemouse.output",
     "vibemouse.sensevoice_onnx",

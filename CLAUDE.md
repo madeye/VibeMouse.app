@@ -15,14 +15,6 @@ pip install -e ".[pt]"            # + PyTorch/FunASR backend
 pip install -e ".[npu]"           # + Intel NPU/OpenVINO
 ```
 
-## Running
-
-```bash
-vibemouse                         # start daemon (defaults to `run` subcommand)
-vibemouse doctor                  # run diagnostics
-vibemouse doctor --fix            # auto-fix then diagnostics
-```
-
 ## Testing
 
 ```bash
@@ -37,7 +29,7 @@ Tests use `unittest` with `unittest.mock`. No external test fixtures or CI-speci
 
 ### Event-driven runtime flow
 
-`main.py` → `app.py (VoiceMouseApp)` → wires together all subsystems:
+`macos_entry.py` → `app.py (VoiceMouseApp)` → wires together all subsystems:
 - **Mouse input**: `SideButtonListener` (NSEvent global monitor via Quartz/AppKit) fires `_on_front_press` / `_on_rear_press` / `_on_gesture` callbacks
 - **Audio**: `AudioRecorder` captures mic to temp WAV via sounddevice
 - **Transcription**: `SenseVoiceTranscriber` with lazy-loaded backend (`_FunASRONNXBackend` or `_FunASRBackend`), runs in daemon threads under `_transcribe_lock`
