@@ -1,0 +1,53 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest tests/ -v
+
+  build:
+    runs-on: macos-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev,download]"
+
+      - name: Download model
+        run: python scripts/download_model.py
+
+      - name: Build .app bundle
+        run: pyinstaller --noconfirm VibeMouse.spec
+
+      - name: Verify .app exists
+        run: test -d dist/VibeMouse.app
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VibeMouse.app
+          path: dist/VibeMouse.app

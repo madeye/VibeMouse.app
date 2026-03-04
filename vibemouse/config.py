@@ -95,10 +95,6 @@ class AppConfig:
     prewarm_on_start: bool
     prewarm_delay_s: float
     status_file: Path
-    openclaw_command: str
-    openclaw_agent: str | None
-    openclaw_timeout_s: float
-    openclaw_retries: int
     front_button: str
     rear_button: str
     temp_dir: Path
@@ -139,19 +135,6 @@ def load_config() -> AppConfig:
         "enter",
         {"enter", "ctrl_enter", "shift_enter", "none"},
     )
-    openclaw_command = os.getenv("VIBEMOUSE_OPENCLAW_COMMAND", "openclaw").strip()
-    if not openclaw_command:
-        raise ValueError("VIBEMOUSE_OPENCLAW_COMMAND must not be empty")
-    openclaw_agent_raw = os.getenv("VIBEMOUSE_OPENCLAW_AGENT", "main").strip()
-    openclaw_agent = openclaw_agent_raw if openclaw_agent_raw else None
-    openclaw_timeout_s = _require_positive_float(
-        "VIBEMOUSE_OPENCLAW_TIMEOUT_S",
-        _read_float("VIBEMOUSE_OPENCLAW_TIMEOUT_S", 20.0),
-    )
-    openclaw_retries = _require_non_negative(
-        "VIBEMOUSE_OPENCLAW_RETRIES",
-        _read_int("VIBEMOUSE_OPENCLAW_RETRIES", 0),
-    )
     prewarm_delay_s = _require_non_negative_float(
         "VIBEMOUSE_PREWARM_DELAY_S",
         _read_float("VIBEMOUSE_PREWARM_DELAY_S", 0.0),
@@ -185,10 +168,6 @@ def load_config() -> AppConfig:
         prewarm_on_start=_read_bool("VIBEMOUSE_PREWARM_ON_START", True),
         prewarm_delay_s=prewarm_delay_s,
         status_file=status_file,
-        openclaw_command=openclaw_command,
-        openclaw_agent=openclaw_agent,
-        openclaw_timeout_s=openclaw_timeout_s,
-        openclaw_retries=openclaw_retries,
         front_button=front_button,
         rear_button=rear_button,
         temp_dir=temp_dir,

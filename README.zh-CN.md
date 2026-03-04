@@ -9,7 +9,7 @@ English README: [`README.md`](./README.md)
 VibeMouse 把高频语音工作流绑定到 macOS 鼠标侧键：
 - 前侧键：开始 / 结束录音
 - 空闲态按后侧键：发送 Enter
-- 录音态按后侧键：停止录音并把转写发送到 OpenClaw
+- 录音态按后侧键：停止录音并转写
 
 核心目标是低摩擦、可日常稳定使用，并且每个环节失败时都有回退路径。
 
@@ -17,9 +17,7 @@ VibeMouse 把高频语音工作流绑定到 macOS 鼠标侧键：
 
 整体是事件驱动，按职责拆分：
 
-1. `vibemouse/main.py`
-   - CLI 入口（`run` / `doctor`）
-2. `vibemouse/app.py`
+1. `vibemouse/app.py`
    - 编排按钮事件、录音状态、转写线程和输出路由
 3. `vibemouse/mouse_listener.py`
    - 通过 NSEvent 全局监听器（Quartz/AppKit）捕获侧键与手势
@@ -28,11 +26,9 @@ VibeMouse 把高频语音工作流绑定到 macOS 鼠标侧键：
 5. `vibemouse/transcriber.py`
    - SenseVoice ASR 后端选择与识别（默认 ONNX，可选 PyTorch）
 6. `vibemouse/output.py`
-   - 输入 / 剪贴板 / OpenClaw 路由与失败回退
+   - 输入 / 剪贴板路由与失败回退
 7. `vibemouse/system_integration.py`
    - macOS 平台集成：Quartz CGEvent API、AppKit NSWorkspace、ApplicationServices 无障碍访问
-8. `vibemouse/doctor.py`
-   - 内置自检（环境、OpenClaw、辅助功能权限、音频输入）
 
 ## 快速开始
 
@@ -40,28 +36,56 @@ VibeMouse 把高频语音工作流绑定到 macOS 鼠标侧键：
 
 - macOS 13+（Ventura 或更高）
 - Python 3.10+
-- 在系统设置 > 隐私与安全 > 辅助功能中为终端授权
+- Xcode 命令行工具（`xcode-select --install`）
+
+### 构建 VibeMouse.app
+
+```bash
+git clone https://github.com/anthropics/VibeMouse.app.git
+cd VibeMouse.app
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install -e ".[dev,download]"
+
+# 下载 SenseVoice ONNX 模型（离线使用）
+python scripts/download_model.py
+
+# 使用 PyInstaller 构建 .app
+pyinstaller --noconfirm --windowed \
+  --name VibeMouse \
+  --icon vibemouse/macos/resources/VibeMouse.icns \
+  --add-data "vibemouse/models:vibemouse/models" \
+  --add-data "vibemouse/macos/resources:vibemouse/macos/resources" \
+  --osx-bundle-identifier com.vibemouse.app \
+  vibemouse/macos_entry.py
+```
+
+构建产物位于 `dist/VibeMouse.app`。
 
 ### 安装
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -U pip
-pip install -e .
+cp -R dist/VibeMouse.app /Applications/
 ```
-
-默认安装走 ONNX 优先，部署体积更小。
-
-可选后端：
-- PyTorch/FunASR（支持 GPU）：`pip install -e ".[pt]"`
-- Intel NPU/OpenVINO：`pip install -e ".[npu]"`
 
 ### 运行
 
+在 `/Applications` 中双击 **VibeMouse**，或通过命令行：
+
 ```bash
-vibemouse
+open /Applications/VibeMouse.app
 ```
+
+VibeMouse 以菜单栏附件形式运行（不会出现在 Dock 中）。通过菜单栏图标选择输入设备、切换开机启动或退出。
+
+### 权限
+
+首次启动时，在 **系统设置 > 隐私与安全** 中授权：
+
+- **辅助功能** — 捕获鼠标侧键与键盘合成所需
+- **麦克风** — 录音所需
 
 ## 默认映射与状态逻辑
 
@@ -70,7 +94,7 @@ vibemouse
 
 状态矩阵：
 - 空闲 + 后侧键 -> Enter（由 `VIBEMOUSE_ENTER_MODE` 控制）
-- 录音中 + 后侧键 -> 停止录音 + OpenClaw 路由
+- 录音中 + 后侧键 -> 停止录音 + 转写
 
 如果鼠标物理定义相反：
 
@@ -78,45 +102,6 @@ vibemouse
 export VIBEMOUSE_FRONT_BUTTON=x2
 export VIBEMOUSE_REAR_BUTTON=x1
 ```
-
-## OpenClaw 集成
-
-OpenClaw 路由可配置：
-- `VIBEMOUSE_OPENCLAW_COMMAND`（默认 `openclaw`）
-- `VIBEMOUSE_OPENCLAW_AGENT`（默认 `main`）
-- `VIBEMOUSE_OPENCLAW_TIMEOUT_S`（默认 `20.0`）
-- `VIBEMOUSE_OPENCLAW_RETRIES`（默认 `0`）
-
-调度行为：
-- 快速非阻塞派发，避免阻塞交互
-- 返回路由原因（如 `dispatched`、`dispatched_after_retry_*`、`spawn_error:*`）
-- 命令无效或拉起失败时自动回退到剪贴板
-
-部署提示：如果你用自己的本地 AI 助手体系，把
-`VIBEMOUSE_OPENCLAW_AGENT` 改成你自己的助手 ID。
-
-## 内置自检 Doctor
-
-运行：
-
-```bash
-vibemouse doctor
-```
-
-先执行安全自动修复再复检：
-
-```bash
-vibemouse doctor --fix
-```
-
-当前检查项：
-- 配置加载是否有效
-- OpenClaw 命令是否可执行 + agent 是否存在
-- 麦克风输入设备可用性
-- macOS 辅助功能权限状态
-- pyobjc 框架可用性
-
-只要存在 `FAIL`，命令退出码就是非零，方便自动化检测。
 
 ## 配置项
 
@@ -139,16 +124,9 @@ vibemouse doctor --fix
 
 在系统设置 > 隐私与安全 > 辅助功能中为终端应用授权，然后重启终端。
 
-### OpenClaw 路由异常
-
-```bash
-openclaw agent --agent main --message "ping" --json
-vibemouse doctor
-```
-
 ### 无音频输入
 
-检查麦克风是否可用且未静音。运行 `vibemouse doctor` 验证输入设备检测。
+检查麦克风是否可用且未静音。
 
 ## License
 

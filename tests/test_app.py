@@ -86,7 +86,7 @@ class VoiceMouseAppButtonBehaviorTests(unittest.TestCase):
         self.assertEqual(status_values, [False])
         self.assertEqual(worker_calls, [(recording, "default")])
 
-    def test_rear_press_stops_recording_and_routes_to_openclaw(self) -> None:
+    def test_rear_press_stops_recording_and_transcribes(self) -> None:
         subject = self._make_subject()
         recording = SimpleNamespace(duration_s=1.2, path=Path("/tmp/voice.wav"))
         setattr(
@@ -117,7 +117,7 @@ class VoiceMouseAppButtonBehaviorTests(unittest.TestCase):
         on_rear()
 
         self.assertEqual(status_values, [False])
-        self.assertEqual(worker_calls, [(recording, "openclaw")])
+        self.assertEqual(worker_calls, [(recording, "default")])
         self.assertEqual(send_enter_calls, [])
 
     def test_rear_press_sends_enter_when_idle(self) -> None:
@@ -175,57 +175,11 @@ class VoiceMouseAppButtonBehaviorTests(unittest.TestCase):
                 on_rear()
 
                 if is_recording:
-                    self.assertEqual(worker_calls, [(recording, "openclaw")])
+                    self.assertEqual(worker_calls, [(recording, "default")])
                     self.assertEqual(send_enter_calls, [])
                 else:
                     self.assertEqual(worker_calls, [])
                     self.assertEqual(send_enter_calls, ["enter"])
-
-    def test_transcribe_and_output_openclaw_uses_openclaw_sender(self) -> None:
-        subject = self._make_subject()
-        recording = SimpleNamespace(duration_s=1.0, path=Path("/tmp/transcribe.wav"))
-        setattr(
-            subject,
-            "_transcriber",
-            SimpleNamespace(
-                transcribe=lambda path: "hello world",
-                device_in_use="cpu",
-                backend_in_use="funasr",
-            ),
-        )
-
-        openclaw_calls: list[str] = []
-        inject_calls: list[tuple[str, bool]] = []
-        setattr(
-            subject,
-            "_output",
-            SimpleNamespace(
-                send_to_openclaw_result=lambda text: openclaw_calls.append(text)
-                or SimpleNamespace(route="openclaw", reason="dispatched"),
-                inject_or_clipboard=lambda text, auto_paste: inject_calls.append(
-                    (text, auto_paste)
-                )
-                or "typed",
-            ),
-        )
-        setattr(subject, "_config", SimpleNamespace(auto_paste=True))
-        setattr(subject, "_transcribe_lock", threading.Lock())
-        setattr(subject, "_workers_lock", threading.Lock())
-        setattr(subject, "_workers", set())
-
-        removed_paths: list[Path] = []
-        setattr(subject, "_safe_unlink", lambda path: removed_paths.append(path))
-
-        transcribe_and_output = cast(
-            Callable[[object, str], None],
-            getattr(subject, "_transcribe_and_output"),
-        )
-        transcribe_and_output(recording, "openclaw")
-
-        self.assertEqual(openclaw_calls, ["hello world"])
-        self.assertEqual(inject_calls, [])
-        self.assertEqual(removed_paths, [Path("/tmp/transcribe.wav")])
-
 
 class VoiceMouseAppPrewarmTests(unittest.TestCase):
     @staticmethod
