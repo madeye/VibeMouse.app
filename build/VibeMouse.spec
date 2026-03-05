@@ -104,7 +104,7 @@ exe = EXE(
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
-    entitlements_file=os.path.join(SPEC_DIR, "entitlements.plist"),
+    entitlements_file=os.path.join(PROJECT_DIR, "entitlements.plist"),
 )
 
 coll = COLLECT(
