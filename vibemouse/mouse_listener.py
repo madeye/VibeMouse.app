@@ -58,53 +58,82 @@ class SideButtonListener:
                     return
 
     def _run_quartz(self) -> None:
-        """Use NSEvent global monitors to capture mouse side buttons on macOS.
+        """Use a CGEventTap to intercept and consume mouse side-button events.
 
-        NSEvent.addGlobalMonitorForEventsMatchingMask:handler: hooks into the
-        main thread's NSApplication run loop, so it works even though this
-        method runs on a daemon thread.
+        Unlike NSEvent global monitors (which observe but cannot suppress
+        events), a CGEventTap can swallow events before they reach other apps,
+        preventing browsers from interpreting side buttons as back/forward.
+
+        Requires Accessibility permissions.
         """
-        try:
-            AppKit = importlib.import_module("AppKit")
-            NSEvent = getattr(AppKit, "NSEvent")
-        except Exception as error:
-            raise RuntimeError("AppKit is not available") from error
+        Quartz = importlib.import_module("Quartz")
 
-        # NSEvent button numbers: 0=left, 1=right, 2=middle, 3=back, 4=forward
-        ns_button_map: dict[str, int] = {"x1": 3, "x2": 4}
-        front_button_num = ns_button_map[self._front_button]
-        rear_button_num = ns_button_map[self._rear_button]
+        # CGEvent constants
+        kCGEventOtherMouseDown: int = 25
+        kCGEventOtherMouseUp: int = 26
 
-        # NSEventType constants
-        NS_OTHER_MOUSE_DOWN = 25
-        NS_OTHER_MOUSE_UP = 26
+        # Button numbers: 2=middle, 3=back(x1), 4=forward(x2)
+        cg_button_map: dict[str, int] = {"x1": 3, "x2": 4}
+        front_button_num = cg_button_map[self._front_button]
+        rear_button_num = cg_button_map[self._rear_button]
+        consumed_buttons = {front_button_num, rear_button_num}
 
-        # NSEventMask constants
-        mask: int = (1 << NS_OTHER_MOUSE_DOWN) | (1 << NS_OTHER_MOUSE_UP)
+        def tap_callback(
+            proxy: object,
+            event_type: int,
+            event: object,
+            refcon: object,
+        ) -> object:
+            # If the tap is disabled by the system (e.g. timeout), re-enable it
+            if event_type == Quartz.kCGEventTapDisabledByTimeout:
+                Quartz.CGEventTapEnable(tap, True)
+                return event
 
-        def handler(event: object) -> None:
-            event_type: int = event.type()  # type: ignore[union-attr]
-            button_num: int = event.buttonNumber()  # type: ignore[union-attr]
+            if event_type == Quartz.kCGEventTapDisabledByUserInput:
+                return event
 
-            if event_type == NS_OTHER_MOUSE_DOWN:
-                if button_num == front_button_num:
+            button: int = Quartz.CGEventGetIntegerValueField(
+                event, Quartz.kCGMouseEventButtonNumber
+            )
+            if button not in consumed_buttons:
+                return event  # pass through non-side-button events
+
+            if event_type == kCGEventOtherMouseDown:
+                if button == front_button_num:
                     self._dispatch_front_press()
-                elif button_num == rear_button_num:
+                elif button == rear_button_num:
                     self._dispatch_rear_press()
 
-        monitor = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
-            mask, handler
+            # Return None to consume the event (suppress browser back/forward)
+            return None
+
+        event_mask = (1 << kCGEventOtherMouseDown) | (1 << kCGEventOtherMouseUp)
+
+        tap = Quartz.CGEventTapCreate(
+            Quartz.kCGSessionEventTap,
+            Quartz.kCGHeadInsertEventTap,
+            Quartz.kCGEventTapOptionDefault,  # active tap (can modify/suppress)
+            event_mask,
+            tap_callback,
+            None,
         )
-        if monitor is None:
+        if tap is None:
             raise RuntimeError(
-                "Failed to create NSEvent global monitor — check Accessibility permissions"
+                "Failed to create CGEventTap — check Accessibility permissions"
             )
+
+        run_loop_source = Quartz.CFMachPortCreateRunLoopSource(None, tap, 0)
+        run_loop = Quartz.CFRunLoopGetCurrent()
+        Quartz.CFRunLoopAddSource(run_loop, run_loop_source, Quartz.kCFRunLoopCommonModes)
+        Quartz.CGEventTapEnable(tap, True)
 
         try:
             while not self._stop.is_set():
-                self._stop.wait(0.5)
+                # Run the CFRunLoop briefly to process events, then check stop
+                Quartz.CFRunLoopRunInMode(Quartz.kCFRunLoopDefaultMode, 0.5, False)
         finally:
-            NSEvent.removeMonitor_(monitor)
+            Quartz.CGEventTapEnable(tap, False)
+            Quartz.CFRunLoopRemoveSource(run_loop, run_loop_source, Quartz.kCFRunLoopCommonModes)
 
     def _dispatch_front_press(self) -> None:
         if self._should_fire_front():
