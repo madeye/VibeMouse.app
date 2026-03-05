@@ -5,6 +5,7 @@ iic/
 vibemouse.egg-info/
 __pycache__/
 *.pyc
-build/
+build/pyinstaller_work/
+build/VibeMouse/
 dist/
 .DS_Store

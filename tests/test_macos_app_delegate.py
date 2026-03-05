@@ -17,8 +17,10 @@ class TestAppDelegateStatusCallback(unittest.TestCase):
     @patch("vibemouse.macos.app_delegate.check_microphone", return_value="authorized")
     @patch("vibemouse.macos.app_delegate.load_config")
     @patch("vibemouse.app.VoiceMouseApp")
+    @patch("vibemouse.macos.model_downloader.is_model_cached", return_value=True)
     def test_status_callback_wired_to_app(
         self,
+        mock_is_cached: MagicMock,
         mock_voice_app_cls: MagicMock,
         mock_load_config: MagicMock,
         mock_check_mic: MagicMock,

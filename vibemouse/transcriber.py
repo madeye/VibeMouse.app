@@ -281,8 +281,7 @@ class _FunASRONNXBackend:
             if macos_cached is not None:
                 return macos_cached
 
-            downloaded = self._download_modelscope_snapshot(canonical_model)
-            self._populate_macos_model_cache(canonical_model, downloaded)
+            downloaded = self._download_model_direct(canonical_model)
             return downloaded
 
         path_candidate = Path(canonical_model)
@@ -317,46 +316,28 @@ class _FunASRONNXBackend:
         return None
 
     @staticmethod
-    def _populate_macos_model_cache(model_id: str, source_dir: Path) -> None:
-        if sys.platform != "darwin":
-            return
-        cache_dir = _FunASRONNXBackend._macos_model_cache_dir(model_id)
-        if cache_dir.exists():
-            return
-        try:
-            cache_dir.parent.mkdir(parents=True, exist_ok=True)
-            cache_dir.symlink_to(source_dir)
-        except OSError:
-            pass
-
-    @staticmethod
     def _contains_onnx_model(model_dir: Path) -> bool:
         return (model_dir / "model_quant.onnx").exists() or (
             model_dir / "model.onnx"
         ).exists()
 
     @staticmethod
-    def _download_modelscope_snapshot(model_id: str) -> Path:
+    def _download_model_direct(model_id: str) -> Path:
+        from vibemouse.macos.model_downloader import download_model, model_cache_dir
+
         try:
-            snapshot_mod = importlib.import_module("modelscope.hub.snapshot_download")
+            download_model()
         except Exception as error:
             raise RuntimeError(
-                "modelscope is required to download ONNX model snapshots"
+                f"Failed to download model {model_id}: {error}"
             ) from error
 
-        snapshot_download = cast(
-            _SnapshotDownloadFn,
-            getattr(snapshot_mod, "snapshot_download"),
-        )
-        snapshot_path = snapshot_download(model_id)
-        model_dir = Path(snapshot_path)
-        if not model_dir.exists():
-            raise RuntimeError(f"Downloaded model path does not exist: {snapshot_path}")
-        if not _FunASRONNXBackend._contains_onnx_model(model_dir):
+        cache = model_cache_dir()
+        if not _FunASRONNXBackend._contains_onnx_model(cache):
             raise RuntimeError(
                 f"Downloaded model {model_id} missing model_quant.onnx/model.onnx"
             )
-        return model_dir
+        return cache
 
     def _ensure_tokenizer_file(self, model_dir: Path) -> None:
         target = model_dir / "chn_jpn_yue_eng_ko_spectok.bpe.model"
@@ -417,7 +398,3 @@ class _SenseVoiceONNXModel(Protocol):
         language: str,
         textnorm: str,
     ) -> list[str]: ...
-
-
-class _SnapshotDownloadFn(Protocol):
-    def __call__(self, model_id: str) -> str: ...

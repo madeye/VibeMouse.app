@@ -9,18 +9,13 @@ PROJECT_DIR = os.path.dirname(SPEC_DIR)
 
 block_cipher = None
 
-_models_dir = os.path.join(PROJECT_DIR, "vibemouse", "models")
-_extra_datas = []
-if os.path.isdir(_models_dir):
-    _extra_datas.append((_models_dir, "vibemouse/models"))
-
 a = Analysis(
     [os.path.join(PROJECT_DIR, "vibemouse", "macos_entry.py")],
     pathex=[],
     binaries=[],
     datas=[
         (os.path.join(PROJECT_DIR, "vibemouse", "macos", "resources"), "vibemouse/macos/resources"),
-    ] + _extra_datas,
+    ],
     hiddenimports=[
         # Core vibemouse modules
         "vibemouse",
@@ -39,6 +34,7 @@ a = Analysis(
         "vibemouse.macos.app_delegate",
         "vibemouse.macos.config_bridge",
         "vibemouse.macos.launchagent",
+        "vibemouse.macos.model_downloader",
         "vibemouse.macos.permissions",
         "vibemouse.macos_entry",
         # pyobjc frameworks
@@ -53,18 +49,18 @@ a = Analysis(
         "sounddevice",
         "_sounddevice_data",
         "soundfile",
+        # Keyboard control (used by output.py for typing/paste)
         "pynput",
-        "pynput.mouse",
-        "pynput.mouse._darwin",
         "pynput.keyboard",
         "pynput.keyboard._darwin",
         # ML / transcription
-        "coremltools",
         "kaldi_native_fbank",
         "sentencepiece",
         "numpy",
         # Clipboard
         "pyperclip",
+        # stdlib needed by pynput in frozen env
+        "secrets",
     ],
     excludes=[
         # Linux-only
@@ -79,6 +75,23 @@ a = Analysis(
         "matplotlib",
         "PIL",
         "IPython",
+        # Heavy transitive deps not needed at runtime
+        "scipy",
+        "sklearn",
+        "scikit-learn",
+        "coremltools",
+        "librosa",
+        "joblib",
+        "threadpoolctl",
+        "cattrs",
+        "sympy",
+        "tqdm",
+        "pycparser",
+        "modelscope",
+        # Test frameworks
+        "pytest",
+        "_pytest",
+        "unittest",
     ],
     hookspath=[],
     hooksconfig={},

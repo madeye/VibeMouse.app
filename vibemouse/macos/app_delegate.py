@@ -78,6 +78,21 @@ class VibemouseAppDelegate(NSObject):  # type: ignore[misc]
         if mic_status == "not_determined":
             request_microphone()
 
+        from vibemouse.macos.model_downloader import is_model_cached
+
+        if is_model_cached():
+            NSLog("VibeMouse: model already cached, continuing startup")
+            self._continue_startup()
+        else:
+            NSLog("VibeMouse: model not cached, showing download splash")
+            from vibemouse.macos.model_downloader import ModelDownloadSplashController
+
+            self._splash = ModelDownloadSplashController.alloc().initWithCallback_(
+                self._continue_startup
+            )
+            self._splash.show()
+
+    def _continue_startup(self) -> None:
         try:
             config = load_config()
             NSLog("VibeMouse: config loaded successfully")

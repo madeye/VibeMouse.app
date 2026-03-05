@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build, sign, notarize, and package VibeMouse.app into a distributable DMG.
+# Build, sign, notarize, and package VibeMouse.app into a distributable zip.
 #
 # Usage:
 #   bash scripts/build_and_notarize.sh
@@ -28,8 +28,8 @@ NOTARIZE_PROFILE="${VIBEMOUSE_NOTARIZE_PROFILE:-VibeMouse-notarize}"
 APP_PATH="$PROJECT_DIR/dist/VibeMouse.app"
 ENTITLEMENTS="$PROJECT_DIR/entitlements.plist"
 VERSION=$(python3 -c "from vibemouse import __version__; print(__version__)" 2>/dev/null || echo "0.0.0")
-DMG_NAME="VibeMouse-${VERSION}.dmg"
-DMG_PATH="$PROJECT_DIR/dist/$DMG_NAME"
+ZIP_NAME="VibeMouse-${VERSION}.zip"
+ZIP_PATH="$PROJECT_DIR/dist/$ZIP_NAME"
 
 # --- 1. Build with PyInstaller ---
 
@@ -43,14 +43,7 @@ if [ -z "${VIRTUAL_ENV:-}" ]; then
 fi
 
 echo "Installing dependencies..."
-pip install -e ".[dev,download]" --quiet
-
-echo "Downloading model (if not already present)..."
-if [ ! -d "$PROJECT_DIR/vibemouse/models/SenseVoiceSmall/SenseVoiceSmall_ANE.mlpackage" ]; then
-    python "$PROJECT_DIR/scripts/download_model.py"
-else
-    echo "  Model already present, skipping download."
-fi
+pip install -e ".[dev]" --quiet
 
 echo "Building VibeMouse.app..."
 pyinstaller build/VibeMouse.spec \
@@ -92,49 +85,42 @@ echo ""
 echo "Verifying code signature..."
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
-# --- 4. Create DMG ---
+# --- 4. Create zip for notarization ---
 
 echo ""
-echo "Creating DMG..."
-# Remove existing DMG if present
-rm -f "$DMG_PATH"
-
-hdiutil create \
-    -volname "VibeMouse" \
-    -srcfolder "$APP_PATH" \
-    -ov \
-    -format UDZO \
-    "$DMG_PATH"
-
-echo "Signing DMG..."
-codesign --force --timestamp \
-    --sign "$SIGN_IDENTITY" \
-    "$DMG_PATH"
+echo "Creating zip..."
+rm -f "$ZIP_PATH"
+ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
 
 # --- 5. Notarize ---
 
 echo ""
 echo "Submitting for notarization (this may take several minutes)..."
-xcrun notarytool submit "$DMG_PATH" \
+xcrun notarytool submit "$ZIP_PATH" \
     --keychain-profile "$NOTARIZE_PROFILE" \
     --wait
 
 # --- 6. Staple ---
 
-echo "Stapling notarization ticket..."
-xcrun stapler staple "$DMG_PATH"
+echo "Stapling notarization ticket to app..."
+xcrun stapler staple "$APP_PATH"
+
+# Re-create zip with stapled app
+echo "Re-creating zip with stapled app..."
+rm -f "$ZIP_PATH"
+ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
 
 # --- 7. Final verification ---
 
 echo ""
 echo "Final Gatekeeper check..."
 spctl --assess --verbose=2 --type execute "$APP_PATH"
-xcrun stapler validate "$DMG_PATH"
+xcrun stapler validate "$APP_PATH"
 
 echo ""
-echo "Distribution build complete: $DMG_PATH"
+echo "Distribution build complete: $ZIP_PATH"
 echo ""
 echo "Verification commands:"
 echo "  codesign --verify --deep --strict --verbose=2 dist/VibeMouse.app"
 echo "  spctl --assess --verbose=2 --type execute dist/VibeMouse.app"
-echo "  xcrun stapler validate dist/$DMG_NAME"
+echo "  xcrun stapler validate dist/VibeMouse.app"

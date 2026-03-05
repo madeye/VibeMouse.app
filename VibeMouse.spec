@@ -26,7 +26,6 @@ RESOURCES_DIR = VIBEMOUSE_PKG / "macos" / "resources"
 # Data files — model assets and macOS resources
 # ---------------------------------------------------------------------------
 datas = [
-    (str(MODELS_DIR), os.path.join("vibemouse", "models")),
     (str(RESOURCES_DIR), os.path.join("vibemouse", "macos", "resources")),
 ]
 
@@ -63,6 +62,7 @@ hiddenimports = [
     "vibemouse.macos.app_delegate",
     "vibemouse.macos.config_bridge",
     "vibemouse.macos.launchagent",
+    "vibemouse.macos.model_downloader",
     "vibemouse.macos.permissions",
     # Runtime dependencies that may be imported dynamically
     "sounddevice",

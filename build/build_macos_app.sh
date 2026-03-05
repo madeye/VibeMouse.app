@@ -25,14 +25,7 @@ if [ -z "${VIRTUAL_ENV:-}" ]; then
 fi
 
 echo "Installing dependencies..."
-pip install -e ".[dev,download]" --quiet
-
-echo "Downloading model (if not already present)..."
-if [ ! -d "$PROJECT_DIR/vibemouse/models/SenseVoiceSmall/SenseVoiceSmall_ANE.mlpackage" ]; then
-    python "$PROJECT_DIR/scripts/download_model.py"
-else
-    echo "  Model already present, skipping download."
-fi
+pip install -e ".[dev]" --quiet
 
 echo "Building VibeMouse.app..."
 pyinstaller build/VibeMouse.spec \
