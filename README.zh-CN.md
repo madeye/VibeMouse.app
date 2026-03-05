@@ -40,7 +40,7 @@ VibeMouse 把高频语音工作流绑定到 macOS 鼠标侧键：
 
 ### 方式 A — 直接下载
 
-从 [最新发布页](https://github.com/madeye/VibeMouse.app/releases/latest) 下载 VibeMouse.app，解压后移动到 `/Applications`。
+从 [最新发布页](https://github.com/madeye/VibeMouse.app/releases/latest) 下载 VibeMouse DMG，打开 `.dmg` 后将 `VibeMouse.app` 拖到 `/Applications`。DMG 已完成 Developer ID 签名和公证，Gatekeeper 不会弹出警告。
 
 ### 方式 B — 从源码构建
 

@@ -38,7 +38,7 @@ The runtime is event-driven and split by responsibility:
 
 ### Option A — Download
 
-Grab [VibeMouse.app](https://github.com/madeye/VibeMouse.app/releases/latest) from the latest release, unzip, and move to `/Applications`.
+Download [VibeMouse DMG](https://github.com/madeye/VibeMouse.app/releases/latest) from the latest release, open the `.dmg`, and drag `VibeMouse.app` to `/Applications`. The DMG is notarized and signed with Developer ID — Gatekeeper will allow it without warnings.
 
 ### Option B — Build from Source
 

@@ -13,7 +13,8 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e .                  # ONNX-only (default), includes pyobjc
 pip install -e ".[pt]"            # + PyTorch/FunASR backend
 pip install -e ".[npu]"           # + Intel NPU/OpenVINO
-bash build/build_macos_app.sh     # build + code sign VibeMouse.app
+bash build/build_macos_app.sh     # dev build + code sign VibeMouse.app
+bash scripts/build_and_notarize.sh  # distribution build: sign, notarize, DMG
 open dist/VibeMouse.app           # run
 ```
 
