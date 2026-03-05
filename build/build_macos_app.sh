@@ -40,10 +40,13 @@ pyinstaller build/VibeMouse.spec \
     --workpath "$PROJECT_DIR/build/pyinstaller_work" \
     --noconfirm
 
+SIGN_IDENTITY="${VIBEMOUSE_SIGN_IDENTITY:-Apple Development: Chao Lv (345Y8TX7HZ)}"
+
 echo "Code signing VibeMouse.app..."
 codesign --deep --force --options runtime \
-    --entitlements "$SCRIPT_DIR/entitlements.plist" \
-    --sign "Apple Development: Chao Lv (345Y8TX7HZ)" \
+    --timestamp \
+    --entitlements "$PROJECT_DIR/entitlements.plist" \
+    --sign "$SIGN_IDENTITY" \
     "$PROJECT_DIR/dist/VibeMouse.app"
 
 echo ""
