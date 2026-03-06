@@ -9,3 +9,4 @@ build/pyinstaller_work/
 build/VibeMouse/
 dist/
 .DS_Store
+.env
